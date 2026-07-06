@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Text Editor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; height: 100vh; display: flex; flex-direction: column; }
+
+#toolbar {
+  background: #16213e; padding: 10px 16px; display: flex; align-items: center;
+  gap: 10px; border-bottom: 2px solid #0f3460; flex-shrink: 0; flex-wrap: wrap;
+}
+#toolbar h1 { font-size: 15px; font-weight: 700; color: #e94560; letter-spacing: 1px; }
+.btn { padding: 6px 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s; white-space: nowrap; }
+.btn-primary { background: #e94560; color: white; }
+.btn-primary:hover { background: #c73652; }
+.btn-success { background: #0f9b58; color: white; }
+.btn-success:hover { background: #0d8049; }
+.btn-secondary { background: #0f3460; color: #aaa; }
+.btn-secondary:hover { background: #1a4a80; color: white; }
+.btn-active { background: #e94560 !important; color: white !important; }
+#info { font-size: 11px; color: #666; margin-left: auto; }
+
+#main { display: flex; flex: 1; overflow: hidden; }
+
+#sidebar {
+  width: 260px; background: #16213e; border-right: 2px solid #0f3460;
+  display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
+}
+#sidebar-header { padding: 10px 12px; background: #0f3460; font-size: 11px; font-weight: 700; color: #e94560; letter-spacing: 1px; }
+#changes-list { flex: 1; overflow-y: auto; padding: 8px; }
+.change-item { background: #0f3460; border-radius: 6px; padding: 8px 10px; margin-bottom: 6px; font-size: 11px; position: relative; }
+.change-item .pg { font-size: 10px; color: #888; margin-bottom: 2px; }
+.change-item .old { color: #e94560; text-decoration: line-through; word-break: break-all; }
+.change-item .new { color: #4ecca3; font-weight: 600; word-break: break-all; }
+.change-item .del-btn { position: absolute; top: 6px; right: 6px; background: #e94560; border: none; color: white; border-radius: 3px; cursor: pointer; font-size: 10px; padding: 1px 5px; }
+
+#canvas-wrapper { flex: 1; overflow: auto; background: #111; cursor: grab; user-select: none; position: relative; }
+#canvas-wrapper.panning { cursor: grabbing; }
+#canvas-wrapper.edit-mode { cursor: crosshair; }
+#canvas-scroller { position: relative; padding: 20px; display: inline-block; }
+#canvas-container { display: inline-block; transform-origin: 0 0; }
+
+.page-wrapper { position: relative; display: block; margin-bottom: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.7); }
+.page-wrapper canvas { display: block; }
+
+#drop-zone { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 16px; color: #555; }
+#drop-zone .icon { font-size: 64px; }
+#file-input { display: none; }
+#zoom-label { font-size: 12px; color: #888; min-width: 44px; text-align: center; }
+
+.overlay-box { position: absolute; cursor: pointer; border: 1px solid transparent; display: flex; align-items: center; }
+.overlay-box:hover { border: 1px solid rgba(233,69,96,0.8) !important; background: rgba(233,69,96,0.12) !important; }
+.overlay-box.changed { background: white !important; border: 2px solid #4ecca3 !important; }
+.overlay-box.free-text { background: white !important; border: 2px dashed #f5a623 !important; cursor: move; }
+.overlay-text { font-family: 'Courier New', monospace; color: black; white-space: nowrap; pointer-events: none; line-height: 1; }
+
+#overlay-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999; }
+#edit-popup {
+  display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  background: #16213e; border: 2px solid #e94560; border-radius: 10px; padding: 18px;
+  z-index: 1000; width: 420px; max-width: 95vw; box-shadow: 0 8px 40px rgba(0,0,0,0.8);
+}
+#edit-popup h3 { font-size: 13px; color: #e94560; margin-bottom: 12px; }
+.popup-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.popup-row > div { flex: 1; }
+#edit-popup label { font-size: 11px; color: #888; display: block; margin-bottom: 3px; }
+#edit-popup input, #edit-popup select {
+  width: 100%; padding: 7px 9px; background: #0f3460; border: 1px solid #1a4a80;
+  border-radius: 5px; color: white; font-size: 13px;
+}
+#edit-popup input:focus, #edit-popup select:focus { outline: none; border-color: #e94560; }
+#edit-popup select option { background: #1a1a2e; }
+#font-preview { background: white; color: black; padding: 6px 10px; border-radius: 4px; margin: 8px 0; min-height: 28px; }
+.popup-btns { display: flex; gap: 8px; margin-top: 10px; }
+.field-wrap { margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>PDF EDITOR</h1>
+  <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">📂 Άνοιγμα PDF</button>
+  <input type="file" id="file-input" accept=".pdf">
+  <div id="zoom-controls" style="display:none; align-items:center; gap:6px;">
+    <button class="btn btn-secondary" onclick="changeZoom(1/1.25)">−</button>
+    <span id="zoom-label">100%</span>
+    <button class="btn btn-secondary" onclick="changeZoom(1.25)">+</button>
+    <button class="btn btn-secondary" onclick="resetZoom()">↺</button>
+    <div style="width:1px;height:18px;background:#0f3460;"></div>
+    <button class="btn btn-secondary btn-active" id="mode-btn" onclick="toggleMode()">✏️ Επεξεργασία</button>
+    <button class="btn btn-secondary" id="addtext-btn" onclick="startAddText()">＋ Νέο κείμενο</button>
+  </div>
+  <button class="btn btn-success" id="export-btn" style="display:none" onclick="exportPDF()">💾 Εξαγωγή PDF</button>
+  <span id="info">Φόρτωσε ένα PDF για να ξεκινήσεις</span>
+</div>
+
+<div id="main">
+  <div id="sidebar">
+    <div id="sidebar-header">ΑΛΛΑΓΕΣ</div>
+    <div id="changes-list"><p style="color:#555;font-size:12px;text-align:center;padding:20px;">Καμία αλλαγή ακόμα</p></div>
+  </div>
+  <div id="canvas-wrapper">
+    <div id="drop-zone">
+      <div class="icon">📄</div>
+      <p style="font-size:16px;">Άνοιξε ένα PDF για να ξεκινήσεις</p>
+    </div>
+    <div id="canvas-scroller" style="display:none">
+      <div id="canvas-container"></div>
+    </div>
+  </div>
+</div>
+
+<div id="overlay-bg" onclick="closePopup()"></div>
+<div id="edit-popup">
+  <h3 id="popup-title">✏️ Επεξεργασία</h3>
+  <div class="field-wrap" id="old-wrap">
+    <label>Παλιό κείμενο:</label>
+    <input type="text" id="old-text-display" readonly style="opacity:0.6">
+  </div>
+  <div class="field-wrap">
+    <label>Νέο κείμενο:</label>
+    <input type="text" id="new-text-input" placeholder="Γράψε το νέο κείμενο...">
+  </div>
+  <div class="popup-row">
+    <div>
+      <label>Γραμματοσειρά:</label>
+      <select id="font-family">
+        <option value="'Courier New',monospace">Courier New</option>
+        <option value="'Lucida Console',monospace">Lucida Console</option>
+        <option value="'Consolas',monospace">Consolas</option>
+        <option value="'OCR A Extended','OCR A',monospace">OCR A Extended</option>
+        <option value="'Letter Gothic Std','Letter Gothic',monospace">Letter Gothic</option>
+        <option value="'Arial Narrow',Arial,sans-serif">Arial Narrow</option>
+        <option value="'Trebuchet MS',sans-serif">Trebuchet MS</option>
+        <option value="Arial,sans-serif">Arial</option>
+        <option value="'Calibri',sans-serif">Calibri</option>
+        <option value="'Tahoma',sans-serif">Tahoma</option>
+        <option value="'Verdana',sans-serif">Verdana</option>
+        <option value="'Times New Roman',serif">Times New Roman</option>
+      </select>
+    </div>
+    <div>
+      <label>Βάρος:</label>
+      <select id="font-weight">
+        <option value="300">Light</option>
+        <option value="400" selected>Regular</option>
+        <option value="500">Medium</option>
+        <option value="700">Bold</option>
+      </select>
+    </div>
+    <div>
+      <label>Μέγεθος:</label>
+      <select id="font-size-sel">
+        <option value="auto" selected>Auto</option>
+        <option value="6">6px</option><option value="7">7px</option><option value="8">8px</option>
+        <option value="9">9px</option><option value="10">10px</option><option value="11">11px</option>
+        <option value="12">12px</option><option value="14">14px</option><option value="16">16px</option>
+        <option value="18">18px</option><option value="20">20px</option><option value="24">24px</option>
+        <option value="28">28px</option><option value="32">32px</option><option value="36">36px</option>
+        <option value="42">42px</option><option value="48">48px</option>
+      </select>
+    </div>
+  </div>
+  <label>Προεπισκόπηση:</label>
+  <div id="font-preview">—</div>
+  <div class="popup-btns">
+    <button class="btn btn-primary" onclick="applyEdit()">✓ Εφαρμογή</button>
+    <button class="btn btn-secondary" onclick="closePopup()">Άκυρο</button>
+    <button class="btn btn-secondary" id="delete-btn" onclick="deleteCurrentChange()" style="margin-left:auto;display:none;">🗑 Διαγραφή</button>
+  </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const BASE_SCALE = 1.5;
+let pdfDoc = null, pdfData = null;
+let cssZoom = 1.0;
+let pageData = []; // {pageNum, words, wrapper, canvas, viewport}
+let changes = [];  // {type:'word'|'free', pageNum, wordIndex?, oldText, newText, x?, y?, fontFamily, fontWeight, customSize}
+let currentEditKey = null;
+let editMode = true;
+let addingText = false;
+let isPanning = false, panStart = {x:0,y:0}, scrollStart = {x:0,y:0};
+
+const canvasWrapper = document.getElementById('canvas-wrapper');
+const canvasContainer = document.getElementById('canvas-container');
+const canvasScroller = document.getElementById('canvas-scroller');
+
+// ── LOAD ──
+document.getElementById('file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  pdfData = new Uint8Array(await file.arrayBuffer());
+  await loadPDF();
+});
+
+async function loadPDF() {
+  pdfDoc = await pdfjsLib.getDocument({data: pdfData}).promise;
+  canvasContainer.innerHTML = '';
+  pageData = [];
+  changes = [];
+  for (let p = 1; p <= pdfDoc.numPages; p++) await appendPage(p);
+  cssZoom = 1.0;
+  applyZoom();
+  document.getElementById('drop-zone').style.display = 'none';
+  canvasScroller.style.display = 'block';
+  document.getElementById('zoom-controls').style.display = 'flex';
+  document.getElementById('export-btn').style.display = 'inline-block';
+  setEditMode(true);
+  updateSidebar();
+  document.getElementById('info').textContent = pdfDoc.numPages + ' σελίδα(-ες) — κάνε κλικ σε κείμενο για αλλαγή';
+}
+
+async function appendPage(pageNum) {
+  const page = await pdfDoc.getPage(pageNum);
+  const vp = page.getViewport({scale: BASE_SCALE});
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'page-wrapper';
+  wrapper.style.width = vp.width + 'px';
+  wrapper.style.height = vp.height + 'px';
+  wrapper.dataset.page = pageNum;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = vp.width; canvas.height = vp.height;
+  await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
+  wrapper.appendChild(canvas);
+  canvasContainer.appendChild(wrapper);
+
+  const content = await page.getTextContent();
+  const words = [];
+  for (const item of content.items) {
+    if (!item.str || !item.str.trim()) continue;
+    const tx = pdfjsLib.Util.transform(vp.transform, item.transform);
+    words.push({
+      text: item.str,
+      x: tx[4], y: tx[5],
+      w: Math.max(item.width * BASE_SCALE, 20),
+      h: Math.max(Math.abs(item.height) * BASE_SCALE, 10),
+      fontSize: Math.sqrt(tx[0]*tx[0]+tx[1]*tx[1]),
+      angle: Math.atan2(tx[1], tx[0])
+    });
+  }
+
+  const pd = {pageNum, words, wrapper, canvas, viewport: vp};
+  pageData.push(pd);
+  buildPageOverlays(pd);
+}
+
+// ── OVERLAYS ──
+function buildAllOverlays() { pageData.forEach(pd => buildPageOverlays(pd)); }
+
+function buildPageOverlays(pd) {
+  pd.wrapper.querySelectorAll('.overlay-box').forEach(d => d.remove());
+
+  pd.words.forEach((word, wIdx) => {
+    const change = changes.find(c => c.type==='word' && c.pageNum===pd.pageNum && c.wordIndex===wIdx);
+    const div = document.createElement('div');
+    div.className = 'overlay-box' + (change ? ' changed' : '');
+    const rotated = Math.abs(word.angle) > 0.1;
+    if (!rotated) {
+      div.style.cssText = `left:${word.x-2}px;top:${word.y-word.h-2}px;width:${word.w+6}px;height:${word.h+4}px;`;
+    } else {
+      div.style.cssText = `left:${word.x-(word.h+4)/2}px;top:${word.y-2}px;width:${word.h+4}px;height:${word.w+6}px;transform:rotate(${word.angle}rad);transform-origin:top left;`;
+    }
+    const span = document.createElement('span');
+    span.className = 'overlay-text';
+    const autoFs = Math.max(word.fontSize * 0.85, 7);
+    if (change) {
+      span.style.fontFamily = change.fontFamily;
+      span.style.fontWeight = change.fontWeight;
+      span.style.fontSize = (change.customSize==='auto' ? autoFs : parseFloat(change.customSize)) + 'px';
+      span.textContent = change.newText;
+    } else {
+      span.style.fontSize = autoFs + 'px';
+      span.textContent = word.text;
+    }
+    div.appendChild(span);
+    div.addEventListener('click', () => { if (editMode && !addingText) openEditWord(pd.pageNum, wIdx); });
+    pd.wrapper.appendChild(div);
+  });
+
+  // Free text for this page
+  changes.filter(c => c.type==='free' && c.pageNum===pd.pageNum).forEach(c => {
+    appendFreeDiv(pd.wrapper, c);
+  });
+}
+
+function appendFreeDiv(wrapper, c) {
+  const div = document.createElement('div');
+  div.className = 'overlay-box free-text';
+  div.style.cssText = `left:${c.x}px;top:${c.y}px;padding:2px 5px;`;
+  const span = document.createElement('span');
+  span.className = 'overlay-text';
+  span.style.fontFamily = c.fontFamily;
+  span.style.fontWeight = c.fontWeight;
+  span.style.fontSize = (c.customSize==='auto'?12:parseFloat(c.customSize))+'px';
+  span.textContent = c.newText;
+  div.appendChild(span);
+
+  // Drag
+  let drag=false, off={x:0,y:0};
+  div.addEventListener('mousedown', e => {
+    if (!editMode) return;
+    drag=true; off={x:e.clientX-c.x*cssZoom, y:e.clientY-c.y*cssZoom};
+    e.stopPropagation(); e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!drag) return;
+    c.x=(e.clientX-off.x)/cssZoom; c.y=(e.clientY-off.y)/cssZoom;
+    div.style.left=c.x+'px'; div.style.top=c.y+'px';
+  });
+  document.addEventListener('mouseup', () => { if(drag){drag=false;updateSidebar();} });
+  div.addEventListener('click', e => {
+    if (!editMode||addingText) return;
+    const idx = changes.filter(ch=>ch.type==='free').indexOf(c);
+    openEditFree(c.pageNum, idx); e.stopPropagation();
+  });
+  wrapper.appendChild(div);
+}
+
+// ── ADD FREE TEXT ──
+function startAddText() {
+  addingText = !addingText;
+  document.getElementById('addtext-btn').classList.toggle('btn-active', addingText);
+  document.getElementById('info').textContent = addingText
+    ? '📍 Κάνε κλικ οπουδήποτε στο PDF για νέο κείμενο'
+    : 'Κάνε κλικ σε κείμενο για αλλαγή';
+}
+
+canvasContainer.addEventListener('click', e => {
+  if (!addingText || !editMode) return;
+  const wrapper = e.target.closest('.page-wrapper');
+  if (!wrapper) return;
+  const pageNum = parseInt(wrapper.dataset.page);
+  const rect = wrapper.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / cssZoom;
+  const y = (e.clientY - rect.top) / cssZoom;
+  addingText = false;
+  document.getElementById('addtext-btn').classList.remove('btn-active');
+  document.getElementById('info').textContent = 'Κάνε κλικ σε κείμενο για αλλαγή';
+  openEditFreeNew(pageNum, x, y);
+});
+
+// ── POPUP ──
+function openEditWord(pageNum, wordIndex) {
+  const pd = pageData.find(p=>p.pageNum===pageNum);
+  const word = pd.words[wordIndex];
+  const change = changes.find(c=>c.type==='word'&&c.pageNum===pageNum&&c.wordIndex===wordIndex);
+  currentEditKey = {type:'word', pageNum, wordIndex};
+  document.getElementById('popup-title').textContent = '✏️ Επεξεργασία Κειμένου';
+  document.getElementById('old-wrap').style.display = 'block';
+  document.getElementById('old-text-display').value = word.text;
+  document.getElementById('new-text-input').value = change ? change.newText : word.text;
+  document.getElementById('font-family').value = change ? change.fontFamily : "'Courier New',monospace";
+  document.getElementById('font-weight').value = change ? change.fontWeight : '400';
+  document.getElementById('font-size-sel').value = change ? change.customSize : 'auto';
+  document.getElementById('delete-btn').style.display = change ? 'inline-block' : 'none';
+  updatePreview(); showPopup();
+}
+
+function openEditFree(pageNum, freeIdx) {
+  const frees = changes.filter(c=>c.type==='free');
+  const c = frees[freeIdx]; if (!c) return;
+  currentEditKey = {type:'free', freeObj: c};
+  document.getElementById('popup-title').textContent = '✏️ Ελεύθερο Κείμενο';
+  document.getElementById('old-wrap').style.display = 'none';
+  document.getElementById('new-text-input').value = c.newText;
+  document.getElementById('font-family').value = c.fontFamily;
+  document.getElementById('font-weight').value = c.fontWeight;
+  document.getElementById('font-size-sel').value = c.customSize;
+  document.getElementById('delete-btn').style.display = 'inline-block';
+  updatePreview(); showPopup();
+}
+
+function openEditFreeNew(pageNum, x, y) {
+  currentEditKey = {type:'free-new', pageNum, x, y};
+  document.getElementById('popup-title').textContent = '＋ Νέο Κείμενο';
+  document.getElementById('old-wrap').style.display = 'none';
+  document.getElementById('new-text-input').value = '';
+  document.getElementById('font-family').value = "'Courier New',monospace";
+  document.getElementById('font-weight').value = '400';
+  document.getElementById('font-size-sel').value = '12';
+  document.getElementById('delete-btn').style.display = 'none';
+  updatePreview(); showPopup();
+}
+
+function showPopup() {
+  document.getElementById('edit-popup').style.display = 'block';
+  document.getElementById('overlay-bg').style.display = 'block';
+  setTimeout(() => document.getElementById('new-text-input').select(), 50);
+}
+
+function closePopup() {
+  document.getElementById('edit-popup').style.display = 'none';
+  document.getElementById('overlay-bg').style.display = 'none';
+  currentEditKey = null;
+}
+
+function updatePreview() {
+  const ff = document.getElementById('font-family').value;
+  const fw = document.getElementById('font-weight').value;
+  const fsv = document.getElementById('font-size-sel').value;
+  const fs = fsv==='auto'?'13px':fsv+'px';
+  const prev = document.getElementById('font-preview');
+  prev.style.cssText = `font-family:${ff};font-weight:${fw};font-size:${fs};background:white;color:black;padding:6px 10px;border-radius:4px;margin:8px 0;min-height:28px;`;
+  prev.textContent = document.getElementById('new-text-input').value || '—';
+}
+
+['input','change'].forEach(ev => {
+  document.getElementById('new-text-input').addEventListener(ev, updatePreview);
+});
+['font-family','font-weight','font-size-sel'].forEach(id => {
+  document.getElementById(id).addEventListener('change', updatePreview);
+});
+document.getElementById('new-text-input').addEventListener('keydown', e => {
+  if (e.key==='Enter') applyEdit();
+  if (e.key==='Escape') closePopup();
+});
+
+function applyEdit() {
+  const newText = document.getElementById('new-text-input').value.trim();
+  if (!currentEditKey) { closePopup(); return; }
+  const fontFamily = document.getElementById('font-family').value;
+  const fontWeight = document.getElementById('font-weight').value;
+  const customSize = document.getElementById('font-size-sel').value;
+
+  if (currentEditKey.type==='word') {
+    const {pageNum,wordIndex} = currentEditKey;
+    const pd = pageData.find(p=>p.pageNum===pageNum);
+    const word = pd.words[wordIndex];
+    const idx = changes.findIndex(c=>c.type==='word'&&c.pageNum===pageNum&&c.wordIndex===wordIndex);
+    if (!newText || newText===word.text) { if (idx>=0) changes.splice(idx,1); }
+    else if (idx>=0) changes[idx]={...changes[idx],newText,fontFamily,fontWeight,customSize};
+    else changes.push({type:'word',pageNum,wordIndex,oldText:word.text,newText,fontFamily,fontWeight,customSize});
+  } else if (currentEditKey.type==='free') {
+    if (!newText) { const idx=changes.indexOf(currentEditKey.freeObj); if(idx>=0)changes.splice(idx,1); }
+    else { const c=currentEditKey.freeObj; c.newText=newText; c.fontFamily=fontFamily; c.fontWeight=fontWeight; c.customSize=customSize; }
+  } else if (currentEditKey.type==='free-new') {
+    if (newText) changes.push({type:'free',pageNum:currentEditKey.pageNum,x:currentEditKey.x,y:currentEditKey.y,oldText:'',newText,fontFamily,fontWeight,customSize});
+  }
+  closePopup(); buildAllOverlays(); updateSidebar();
+}
+
+function deleteCurrentChange() {
+  if (!currentEditKey) return;
+  if (currentEditKey.type==='word') {
+    const {pageNum,wordIndex}=currentEditKey;
+    const idx=changes.findIndex(c=>c.type==='word'&&c.pageNum===pageNum&&c.wordIndex===wordIndex);
+    if (idx>=0) changes.splice(idx,1);
+  } else if (currentEditKey.type==='free') {
+    const idx=changes.indexOf(currentEditKey.freeObj);
+    if (idx>=0) changes.splice(idx,1);
+  }
+  closePopup(); buildAllOverlays(); updateSidebar();
+}
+
+function deleteChange(i) { changes.splice(i,1); buildAllOverlays(); updateSidebar(); }
+
+function updateSidebar() {
+  const list = document.getElementById('changes-list');
+  list.innerHTML = '';
+  if (!changes.length) { list.innerHTML='<p style="color:#555;font-size:12px;text-align:center;padding:20px;">Καμία αλλαγή ακόμα</p>'; return; }
+  changes.forEach((c,i) => {
+    const div = document.createElement('div');
+    div.className = 'change-item';
+    div.innerHTML = `<div class="pg">Σελ. ${c.pageNum}${c.type==='free'?' · ελεύθερο':''}</div>
+      <div class="old">${c.oldText||'(νέο)'}</div>
+      <div class="new">→ ${c.newText}</div>
+      <button class="del-btn" onclick="deleteChange(${i})">✕</button>`;
+    list.appendChild(div);
+  });
+}
+
+// ── MODE ──
+function setEditMode(val) {
+  editMode = val;
+  const btn = document.getElementById('mode-btn');
+  if (editMode) {
+    canvasWrapper.classList.add('edit-mode');
+    btn.textContent='✏️ Επεξεργασία'; btn.classList.add('btn-active');
+  } else {
+    canvasWrapper.classList.remove('edit-mode');
+    btn.textContent='✋ Περιήγηση'; btn.classList.remove('btn-active');
+  }
+}
+function toggleMode() { setEditMode(!editMode); }
+
+// ── ZOOM ──
+function applyZoom() {
+  canvasContainer.style.transform = `scale(${cssZoom})`;
+  canvasContainer.style.transformOrigin = '0 0';
+  document.getElementById('zoom-label').textContent = Math.round(cssZoom*100)+'%';
+  // Update scroller size so scrollbars work
+  const w = canvasContainer.scrollWidth * cssZoom + 40;
+  const h = canvasContainer.scrollHeight * cssZoom + 40;
+  canvasScroller.style.width = w+'px';
+  canvasScroller.style.height = h+'px';
+}
+
+function changeZoom(factor) { cssZoom = Math.max(0.1, Math.min(10, cssZoom*factor)); applyZoom(); }
+function resetZoom() { cssZoom=1.0; applyZoom(); canvasWrapper.scrollLeft=0; canvasWrapper.scrollTop=0; }
+
+// Scroll = zoom toward cursor
+canvasWrapper.addEventListener('wheel', e => {
+  e.preventDefault();
+  const factor = e.deltaY<0 ? 1.1 : 1/1.1;
+  const rect = canvasWrapper.getBoundingClientRect();
+  const mx = e.clientX-rect.left+canvasWrapper.scrollLeft;
+  const my = e.clientY-rect.top+canvasWrapper.scrollTop;
+  const cx = (mx-20)/cssZoom, cy = (my-20)/cssZoom;
+  cssZoom = Math.max(0.1, Math.min(10, cssZoom*factor));
+  applyZoom();
+  canvasWrapper.scrollLeft = cx*cssZoom+20-(e.clientX-rect.left);
+  canvasWrapper.scrollTop  = cy*cssZoom+20-(e.clientY-rect.top);
+}, {passive:false});
+
+// Pan (pan mode only)
+canvasWrapper.addEventListener('mousedown', e => {
+  if (editMode||e.button!==0) return;
+  isPanning=true; panStart={x:e.clientX,y:e.clientY};
+  scrollStart={x:canvasWrapper.scrollLeft,y:canvasWrapper.scrollTop};
+  canvasWrapper.classList.add('panning'); e.preventDefault();
+});
+document.addEventListener('mousemove', e => {
+  if (!isPanning) return;
+  canvasWrapper.scrollLeft=scrollStart.x-(e.clientX-panStart.x);
+  canvasWrapper.scrollTop =scrollStart.y-(e.clientY-panStart.y);
+});
+document.addEventListener('mouseup', () => { isPanning=false; canvasWrapper.classList.remove('panning'); });
+
+// ── EXPORT ──
+async function exportPDF() {
+  if (!pdfData) return;
+  const btn = document.getElementById('export-btn');
+  btn.textContent='⏳ Εξαγωγή...'; btn.disabled=true;
+  const {jsPDF} = window.jspdf;
+  let doc = null;
+  const EXP = 3;
+
+  for (let p=1; p<=pdfDoc.numPages; p++) {
+    const page = await pdfDoc.getPage(p);
+    const vp = page.getViewport({scale:EXP});
+    const off = document.createElement('canvas');
+    off.width=vp.width; off.height=vp.height;
+    const ctx = off.getContext('2d');
+    await page.render({canvasContext:ctx, viewport:vp}).promise;
+
+    const pd = pageData.find(d=>d.pageNum===p);
+    const content = await page.getTextContent();
+
+    // Word changes
+    changes.filter(c=>c.type==='word'&&c.pageNum===p).forEach(change => {
+      let count=0;
+      for (let i=0;i<content.items.length;i++) {
+        const it=content.items[i];
+        if (!it.str||!it.str.trim()) continue;
+        if (count===change.wordIndex) {
+          const tx=pdfjsLib.Util.transform(vp.transform,it.transform);
+          const iw=it.width*EXP+10, ih=Math.abs(it.height)*EXP+6;
+          const angle=Math.atan2(tx[1],tx[0]);
+          const autoFs=Math.sqrt(tx[0]*tx[0]+tx[1]*tx[1])*0.9;
+          ctx.save(); ctx.translate(tx[4],tx[5]);
+          if (Math.abs(angle)>0.1) ctx.rotate(angle);
+          ctx.fillStyle='white'; ctx.fillRect(-3,-ih+2,iw+6,ih+2);
+          ctx.fillStyle='black';
+          const fs=change.customSize==='auto'?autoFs:parseFloat(change.customSize)*(EXP/BASE_SCALE);
+          ctx.font=`${change.fontWeight} ${fs}px ${change.fontFamily.replace(/'/g,'"')}`;
+          ctx.textBaseline='bottom'; ctx.fillText(change.newText,0,0);
+          ctx.restore(); break;
+        }
+        count++;
+      }
+    });
+
+    // Free text
+    changes.filter(c=>c.type==='free'&&c.pageNum===p).forEach(c => {
+      const fs=c.customSize==='auto'?12*(EXP/BASE_SCALE):parseFloat(c.customSize)*(EXP/BASE_SCALE);
+      ctx.save();
+      ctx.font=`${c.fontWeight} ${fs}px ${c.fontFamily.replace(/'/g,'"')}`;
+      ctx.fillStyle='black'; ctx.textBaseline='top';
+      ctx.fillText(c.newText, c.x*(EXP/BASE_SCALE), c.y*(EXP/BASE_SCALE));
+      ctx.restore();
+    });
+
+    const pw=vp.width/EXP*25.4/96, ph=vp.height/EXP*25.4/96;
+    if (!doc) doc=new jsPDF({orientation:pw>ph?'landscape':'portrait',unit:'mm',format:[pw,ph]});
+    else doc.addPage([pw,ph],pw>ph?'landscape':'portrait');
+    doc.addImage(off.toDataURL('image/jpeg',0.93),'JPEG',0,0,pw,ph);
+  }
+
+  doc.save('edited.pdf');
+  btn.textContent='💾 Εξαγωγή PDF'; btn.disabled=false;
+}
+</script>
+</body>
+</html>

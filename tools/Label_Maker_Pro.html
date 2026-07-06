@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Label Maker Pro
+    </title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS for Excel parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@700&family=Lobster&family=Open+Sans:wght@700&family=Oswald:wght@700&family=Pacifico&family=Playfair+Display:wght@700&family=Roboto:wght@700&display=swap" rel="stylesheet">
+    <style>
+        /* Base Setup */
+        body {
+            background-color: #e2e8f0;
+            font-family: 'Roboto', sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Layout */
+        #app {
+            display: flex;
+            height: 100%;
+        }
+
+        /* Sidebar */
+        #sidebar {
+            width: 380px;
+            background: white;
+            border-right: 1px solid #cbd5e1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            z-index: 10;
+            box-shadow: 4px 0 10px rgba(0,0,0,0.05);
+        }
+
+        /* Preview Area */
+        #preview {
+            flex: 1;
+            background: #64748b;
+            padding: 40px;
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* The Sheet (Paper) */
+        .sheet {
+            background: white;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            display: flex;
+            flex-wrap: wrap;
+            align-content: flex-start; /* Rows start from top */
+            padding-top: var(--margin-top, 10mm);
+            padding-left: var(--margin-left, 5mm);
+            box-sizing: border-box;
+            position: relative;
+            transform-origin: top center;
+        }
+
+        /* The Label Container (Outer wrapper for cutting guide) */
+        .label-wrapper {
+            box-sizing: border-box;
+            border: 1px dashed #cbd5e1; /* Visual cutting guide */
+            padding: 2mm; /* Safe zone */
+            overflow: hidden;
+            position: relative;
+            background: white;
+            page-break-inside: avoid;
+            display: flex;
+        }
+
+        /* The Inner Content (Where border/content lives) */
+        .label-inner {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            overflow: hidden;
+            /* Border styles & padding applied here via CSS classes */
+        }
+
+        .label-content {
+            text-align: center;
+            width: 100%;
+            flex: 1; /* Take remaining space */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            padding: 2px;
+        }
+
+        .label-logo {
+            /* Logo takes up to 35% of height max, varies by content */
+            max-height: 35%; 
+            width: auto;
+            max-width: 90%;
+            object-fit: contain;
+            margin-bottom: 2mm; /* Added margin below logo */
+            display: block;
+        }
+
+        .label-text {
+            font-weight: bold;
+            line-height: 1.1;
+            width: 100%;
+            white-space: pre-wrap; /* Handle newlines */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        /* Aesthetic Borders with Intelligent Padding */
+        .border-none { border: none; padding: 1mm; }
+        .border-solid { border: 2px solid #000; padding: 2mm; }
+        .border-double { border: 4px double #000; padding: 2mm; }
+        .border-rounded { border: 2px solid #000; border-radius: 8px; padding: 2mm; }
+        .border-fancy { border: 3px solid #333; border-radius: 0; outline: 1px solid #333; outline-offset: -5px; padding: 5mm; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+        ::-webkit-scrollbar-track { background: #e2e8f0; }
+
+        /* Print Styles */
+        @media print {
+            body, #app { height: auto; overflow: visible; display: block; background: white; }
+            #sidebar, .no-print { display: none !important; }
+            #preview { padding: 0; background: none; display: block; }
+            .sheet {
+                box-shadow: none;
+                margin: 0;
+                break-after: page;
+                page-break-after: always;
+            }
+            .sheet:last-child { break-after: avoid; }
+            .label-wrapper { border: none !important; } 
+        }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <!-- Configuration Sidebar -->
+    <div id="sidebar">
+        <div class="p-5 border-b bg-slate-800 text-white">
+            <h1 class="text-xl font-bold"><i class="fas fa-tags mr-2"></i>Label Maker Pro</h1>
+            <p class="text-xs text-slate-400 mt-1">by Christos Deligiorgis</p>
+        </div>
+
+        <div class="p-5 space-y-6 flex-1 overflow-y-auto">
+            
+            <!-- Section 1: Dimensions -->
+            <div class="space-y-3 border-b pb-5">
+                <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide">1. Διαστάσεις</h3>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Χαρτί</label>
+                        <select id="pageSize" class="w-full border rounded p-2 text-sm bg-slate-50" onchange="render()">
+                            <option value="A4">A4 (210x297)</option>
+                            <option value="A3">A3 (297x420)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Προσανατολισμός</label>
+                        <select id="orientation" class="w-full border rounded p-2 text-sm bg-slate-50" onchange="render()">
+                            <option value="portrait">Κάθετα</option>
+                            <option value="landscape">Οριζόντια</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Πλάτος (mm)</label>
+                        <input type="number" id="labelWidth" value="66" class="w-full border rounded p-2 text-sm" onchange="render()">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Ύψος (mm)</label>
+                        <input type="number" id="labelHeight" value="33.9" class="w-full border rounded p-2 text-sm" onchange="render()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Data Input -->
+            <div class="space-y-3 border-b pb-5">
+                <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide">2. Δεδομένα</h3>
+                
+                <!-- Excel Import Button -->
+                <div class="mb-3">
+                    <label class="flex items-center justify-center w-full p-2 bg-green-50 border border-green-200 rounded cursor-pointer hover:bg-green-100 transition text-green-700 font-bold text-sm gap-2">
+                        <i class="fas fa-file-excel"></i> Εισαγωγή Excel / CSV
+                        <input type="file" id="excelInput" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" class="hidden" onchange="handleExcelUpload()">
+                    </label>
+                </div>
+
+                <div class="bg-blue-50 p-2 text-xs text-blue-800 rounded border border-blue-200 mb-2">
+                    <strong>Tip:</strong> Στο Excel, κάθε γραμμή είναι μια ετικέτα. Κάθε κελί της γραμμής είναι μια νέα σειρά κειμένου.
+                </div>
+
+                <textarea id="dataInput" class="w-full border rounded p-2 text-sm h-32 font-mono" placeholder="Εταιρεία Α.Ε. | Προϊόν 1&#10;Εταιρεία Α.Ε. | Προϊόν 2" oninput="render()">
+</textarea>
+
+                <div class="flex justify-between items-center bg-slate-50 p-2 rounded">
+                    <span class="text-xs font-bold text-slate-600">Αντίγραφα (ανά είδος):</span>
+                    <input type="number" id="copiesNum" value="1" min="1" class="w-16 border rounded p-1 text-center text-sm" onchange="render()">
+                </div>
+            </div>
+
+            <!-- Section 3: Design & Style -->
+            <div class="space-y-3 border-b pb-5">
+                <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide">3. Στυλ & Logo</h3>
+
+                <!-- Logo -->
+                <div>
+                    <div class="flex items-center gap-2">
+                        <label class="flex-1 cursor-pointer bg-white border border-dashed border-slate-300 rounded p-2 text-center hover:bg-slate-50 transition">
+                            <span class="text-xs text-slate-600"><i class="fas fa-image mr-1"></i> Logo</span>
+                            <input type="file" id="logoInput" accept="image/*" class="hidden" onchange="handleLogoUpload()">
+                        </label>
+                        <button onclick="clearLogo()" class="text-red-500 hover:text-red-700 px-2 hidden" id="clearLogoBtn"><i class="fas fa-trash"></i></button>
+                    </div>
+                    <img id="logoImgDisplay" src="" class="h-8 mt-2 mx-auto object-contain hidden">
+                </div>
+
+                <!-- Font Selection -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Γραμματοσειρά</label>
+                    <select id="fontFamily" class="w-full border rounded p-2 text-sm bg-white" onchange="render()">
+                        <option value="'Roboto', sans-serif">Roboto (Κλασική/Καθαρή)</option>
+                        <option value="'Open Sans', sans-serif">Open Sans (Μοντέρνα)</option>
+                        <option value="'Playfair Display', serif">Playfair Display (Κομψή/Serif)</option>
+                        <option value="'Oswald', sans-serif">Oswald (Στενή/Έντονη)</option>
+                        <option value="'Lobster', cursive">Lobster (Καλλιτεχνική)</option>
+                        <option value="'Pacifico', cursive">Pacifico (Χειρόγραφη)</option>
+                        <option value="'Comfortaa', cursive">Comfortaa (Στρογγυλή)</option>
+                    </select>
+                </div>
+
+                <!-- Font Size Manual Control -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Μέγεθος Κειμένου (Scale)</label>
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-font text-xs text-slate-400"></i>
+                        <input type="range" id="fontScale" min="30" max="100" value="90" class="flex-1" oninput="render()">
+                        <span class="text-xs w-8 text-right" id="fontScaleVal">90%</span>
+                    </div>
+                </div>
+
+                <!-- Borders -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Πλαίσιο Ετικέτας</label>
+                    <select id="borderStyle" class="w-full border rounded p-2 text-sm bg-white" onchange="render()">
+                        <option value="border-none">Κανένα (Μόνο κείμενο)</option>
+                        <option value="border-solid">Απλό Πλαίσιο</option>
+                        <option value="border-rounded">Στρογγυλεμένο</option>
+                        <option value="border-double">Διπλή Γραμμή</option>
+                        <option value="border-fancy">Καλλιτεχνικό</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Section 4: Print Margins -->
+            <div class="space-y-3 pb-5">
+                <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide">4. Περιθώρια (Print)</h3>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500">Top (mm)</label>
+                        <input type="number" id="marginTop" value="10" step="0.5" class="w-full border rounded p-1 text-sm" onchange="render()">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500">Left (mm)</label>
+                        <input type="number" id="marginLeft" value="5" step="0.5" class="w-full border rounded p-1 text-sm" onchange="render()">
+                    </div>
+                </div>
+                <label class="flex items-center gap-2 cursor-pointer mt-2">
+                    <input type="checkbox" id="showCutGuides" checked onchange="toggleGuides()" class="w-4 h-4 text-blue-600">
+                    <span class="text-xs text-slate-700">Οδηγοί Κοπής (Γκρι διακεκομμένη)</span>
+                </label>
+            </div>
+
+        </div>
+
+        <div class="p-5 border-t bg-slate-50">
+            <button onclick="window.print()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded shadow flex items-center justify-center gap-2">
+                <i class="fas fa-print"></i> Εκτύπωση / PDF
+            </button>
+        </div>
+    </div>
+
+    <!-- Preview -->
+    <div id="preview"></div>
+</div>
+
+<style id="page-style"></style>
+
+<script>
+    let logoDataUrl = null;
+    const sizes = { 'A4': { w: 210, h: 297 }, 'A3': { w: 297, h: 420 } };
+
+    // Excel Parsing Logic
+    function handleExcelUpload() {
+        const input = document.getElementById('excelInput');
+        const file = input.files[0];
+        
+        if (!file) return;
+
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            
+            // Get first sheet
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            
+            // Convert to JSON (array of arrays)
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+            
+            // Process rows
+            // Logic: Join cell values with ' | ' separator
+            const processedText = jsonData
+                .filter(row => row.length > 0) // Remove empty rows
+                .map(row => row.join(' | '))
+                .join('\n');
+            
+            // Update Textarea
+            document.getElementById('dataInput').value = processedText;
+            
+            // Re-render
+            render();
+            
+            // Reset input so same file can be selected again if needed
+            input.value = '';
+        };
+        
+        reader.readAsArrayBuffer(file);
+    }
+
+    function handleLogoUpload() {
+        const file = document.getElementById('logoInput').files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                logoDataUrl = e.target.result;
+                const img = document.getElementById('logoImgDisplay');
+                img.src = logoDataUrl;
+                img.classList.remove('hidden');
+                document.getElementById('clearLogoBtn').classList.remove('hidden');
+                render();
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    function clearLogo() {
+        logoDataUrl = null;
+        document.getElementById('logoInput').value = "";
+        document.getElementById('logoImgDisplay').classList.add('hidden');
+        document.getElementById('clearLogoBtn').classList.add('hidden');
+        render();
+    }
+
+    function toggleGuides() {
+        render();
+    }
+
+    function autoScaleText(element, maxPercent) {
+        // Reset to a large size first
+        let size = 60; 
+        element.style.fontSize = size + 'px';
+        
+        const parent = element.parentElement;
+        // Calculate available height explicitly (container height - padding)
+        const maxHeight = parent.clientHeight; 
+        const maxWidth = parent.clientWidth;
+        
+        // Scale down loop
+        while ((element.scrollHeight > maxHeight || element.scrollWidth > maxWidth) && size > 6) {
+            size--;
+            element.style.fontSize = size + 'px';
+        }
+
+        // Apply manual reduction
+        const manualScale = parseInt(document.getElementById('fontScale').value) / 100;
+        let finalSize = Math.floor(size * manualScale);
+        element.style.fontSize = finalSize + 'px';
+    }
+
+    function render() {
+        const previewEl = document.getElementById('preview');
+        previewEl.innerHTML = '';
+        
+        // Settings
+        const sizeKey = document.getElementById('pageSize').value;
+        const orientation = document.getElementById('orientation').value;
+        const lWidth = parseFloat(document.getElementById('labelWidth').value);
+        const lHeight = parseFloat(document.getElementById('labelHeight').value);
+        const mTop = parseFloat(document.getElementById('marginTop').value);
+        const mLeft = parseFloat(document.getElementById('marginLeft').value);
+        const copies = parseInt(document.getElementById('copiesNum').value) || 1;
+        const borderStyle = document.getElementById('borderStyle').value;
+        const fontFamily = document.getElementById('fontFamily').value; // Get font
+        const showGuides = document.getElementById('showCutGuides').checked;
+        const fontScalePercent = document.getElementById('fontScale').value;
+        document.getElementById('fontScaleVal').innerText = fontScalePercent + '%';
+
+        // Page Style
+        let pageW = sizes[sizeKey].w;
+        let pageH = sizes[sizeKey].h;
+        if (orientation === 'landscape') [pageW, pageH] = [pageH, pageW];
+        
+        document.getElementById('page-style').innerHTML = 
+            `@page { size: ${sizeKey} ${orientation}; margin: 0; } 
+             .sheet { width: ${pageW}mm; height: ${pageH}mm; }`;
+
+        // Grid calc
+        const cols = Math.floor((pageW - mLeft) / lWidth);
+        const rows = Math.floor((pageH - mTop) / lHeight);
+        const itemsPerPage = cols * rows;
+
+        // Data Processing
+        const rawText = document.getElementById('dataInput').value;
+        const lines = rawText.split('\n').filter(line => line.trim() !== '');
+        let allLabels = [];
+        lines.forEach(text => { for(let i=0; i<copies; i++) allLabels.push(text); });
+
+        if (allLabels.length === 0) return;
+
+        let currentSheet = null;
+
+        allLabels.forEach((text, index) => {
+            if (index % itemsPerPage === 0) {
+                currentSheet = document.createElement('div');
+                currentSheet.className = 'sheet';
+                currentSheet.style.setProperty('--margin-top', mTop + 'mm');
+                currentSheet.style.setProperty('--margin-left', mLeft + 'mm');
+                previewEl.appendChild(currentSheet);
+            }
+
+            // Wrapper (Cutting Guide)
+            const wrapper = document.createElement('div');
+            wrapper.className = 'label-wrapper';
+            wrapper.style.width = lWidth + 'mm';
+            wrapper.style.height = lHeight + 'mm';
+            wrapper.style.border = showGuides ? '1px dashed #cbd5e1' : 'none';
+
+            // Inner (Aesthetic Border)
+            const inner = document.createElement('div');
+            inner.className = `label-inner ${borderStyle}`;
+
+            // Content
+            let html = '';
+            if (logoDataUrl) {
+                html += `<img src="${logoDataUrl}" class="label-logo">`;
+            }
+            
+            // Handle split lines (| -> <br>)
+            const formattedText = text.split('|').join('\n');
+            // Apply font family inline to label text
+            html += `<div class="label-content"><div class="label-text" style="font-family: ${fontFamily}">${formattedText}</div></div>`;
+            
+            inner.innerHTML = html;
+            wrapper.appendChild(inner);
+            currentSheet.appendChild(wrapper);
+
+            // Scale text
+            const textEl = inner.querySelector('.label-text');
+            autoScaleText(textEl);
+        });
+    }
+
+    window.onload = render;
+</script>
+
+</body>
+</html>
