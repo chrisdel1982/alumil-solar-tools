@@ -1,0 +1,1776 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PV BoM Calculator</title>
+    <!-- Φόρτωση Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Χρήση μιας ευανάγνωστης γραμματοσειράς */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        @import url('https://rsms.me/inter/inter.css');
+
+        /* Alumil Solar Brand Colors - Based on actual logo */
+        :root {
+            --alumil-yellow: #FFD700;
+            --alumil-yellow-dark: #FFC700;
+            --alumil-green: #9ACD32;
+            --alumil-green-light: #B0DD50;
+            --alumil-blue: #0066A1;
+            --alumil-blue-dark: #004e7a;
+        }
+
+        /* Custom CSS για ομαλό άνοιγμα/κλείσιμο (collapsible) */
+        .collapsible-content {
+            max-height: 2000px; /* Αυξάνω για τον πίνακα */
+            transition: max-height 0.3s ease-in-out, padding 0.3s ease-in-out, opacity 0.3s ease-in-out;
+            overflow: hidden;
+            opacity: 1;
+            padding: 1rem;
+        }
+        .collapsible-content.hidden {
+            max-height: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            opacity: 0;
+        }
+        .toggle-icon.rotate-180 {
+             transform: rotate(180deg);
+        }
+        
+        /* Στυλ για τον πίνακα τραπεζιών */
+        .tables-grid {
+            display: grid;
+            grid-template-columns: 40px 80px 80px 100px 80px 80px 80px 100px 80px 100px 40px;
+            gap: 8px;
+            align-items: center;
+            font-size: 0.875rem;
+        }
+        .tables-grid input[type="number"] {
+            padding: 4px 6px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            width: 100%;
+            font-size: 0.875rem;
+        }
+        .tables-grid input[type="number"]:focus {
+            outline: none;
+            border-color: var(--alumil-green);
+            ring: 2px;
+            ring-color: #00A65180;
+        }
+        .tables-grid .read-only {
+            background-color: #f3f4f6;
+            color: #6b7280;
+            font-weight: 500;
+        }
+        .tables-header {
+            font-weight: 600;
+            color: #333;
+            padding: 8px 4px;
+            background: linear-gradient(135deg, var(--alumil-yellow) 0%, var(--alumil-green) 100%);
+            border-bottom: 2px solid var(--alumil-green);
+            font-size: 0.75rem;
+            text-align: center;
+        }
+        
+        /* Alumil Solar branded buttons */
+        .btn-alumil-primary {
+            background: linear-gradient(135deg, var(--alumil-yellow) 0%, var(--alumil-green) 100%);
+            color: #333;
+            font-weight: 600;
+        }
+        .btn-alumil-primary:hover {
+            background: linear-gradient(135deg, var(--alumil-yellow-dark) 0%, var(--alumil-green-light) 100%);
+        }
+        .btn-alumil-secondary {
+            background: linear-gradient(135deg, var(--alumil-blue) 0%, var(--alumil-blue-dark) 100%);
+            color: white;
+        }
+        .btn-alumil-secondary:hover {
+            background: var(--alumil-blue-dark);
+        }
+        
+        /* Global input and select styling */
+        input[type="number"]:focus,
+        input[type="text"]:focus,
+        select:focus {
+            border-color: var(--alumil-green) !important;
+            ring-color: #9ACD3280 !important;
+        }
+        
+        /* Modal styling for purlin editor */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            overflow: auto;
+        }
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 8px;
+            max-width: 800px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .purlin-row {
+            display: grid;
+            grid-template-columns: 40px 120px 150px 150px 40px;
+            gap: 12px;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .purlin-header {
+            font-weight: 600;
+            color: #374151;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #d1d5db;
+        }
+        
+        /* Compact BoM Table Styling */
+        #bomTableBody td {
+            padding: 0.25rem 0.3rem !important;
+            font-size: 0.7rem !important;
+            line-height: 1.2 !important;
+            white-space: nowrap !important;
+        }
+        
+        /* Επιτρέπω wrapping στην περιγραφή */
+        #bomTableBody td:nth-child(2) {
+            white-space: normal !important;
+            max-width: 300px;
+        }
+        
+        /* Compact BoM Table Headers */
+        table thead th {
+            padding: 0.3rem 0.3rem !important;
+            font-size: 0.65rem !important;
+            line-height: 1.2 !important;
+            white-space: nowrap !important;
+        }
+        
+        /* Μικρότερη γραμματοσειρά για τα σύνολα */
+        #bomTableBody tr.font-bold td {
+            font-size: 0.7rem !important;
+            padding: 0.3rem 0.3rem !important;
+            white-space: nowrap !important;
+        }
+        
+        /* Μόνο η τελευταία γραμμή να έχει λίγο μεγαλύτερο μέγεθος */
+        #bomTableBody tr.text-lg td {
+            font-size: 0.8rem !important;
+            padding: 0.4rem 0.3rem !important;
+            white-space: nowrap !important;
+        }
+        
+        /* Καλύτερη στοίχιση - αριστερά για κείμενο, δεξιά για αριθμούς */
+        table tbody td:first-child {
+            text-align: left !important;
+        }
+        table tbody td:nth-child(2) {
+            text-align: left !important;
+        }
+        table tbody td:nth-child(3),
+        table tbody td:nth-child(5),
+        table tbody td:nth-child(6),
+        table tbody td:nth-child(7),
+        table tbody td:nth-child(8) {
+            text-align: right !important;
+        }
+        table tbody td:nth-child(4) {
+            text-align: center !important;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+<!-- HEADER -->
+<div style="background: #3f4854; padding: 1.5rem 2rem; border-bottom: 2px solid #2d3239; margin-bottom: 2rem;">
+    <div style="max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        
+        <!-- Logo Αριστερά -->
+        <div>
+            <img src="https://alumilsolar.com/wp-content/uploads/2025/04/dc-alumil-logo-final-no-shadow-300x118.png" 
+                 alt="Alumil Solar" 
+                 style="height: 50px; width: auto;">
+        </div>
+        
+        <!-- Τίτλος Δεξιά -->
+        <div style="text-align: right;">
+            <h1 style="font-size: 1.75rem; font-weight: bold; color: #ffffff; margin: 0; line-height: 1;">SS199 BoM Calculator</h1>
+        </div>
+        
+    </div>
+</div>
+    <div class="max-w-7xl mx-auto px-4">
+
+        <!-- === ΤΕΛΟΣ ΛΟΓΟΤΥΠΟΥ === -->
+
+        <h1 class="text-3xl font-bold text-gray-900 mb-6 text-center">
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Πίνακας Εισόδου Δεδομένων -->
+            <div class="lg:col-span-1 bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4 border-b pb-2">Δεδομένα Εισόδου</h2>
+
+                <!-- Κουμπιά Διαχείρισης -->
+                <div class="mb-4 flex flex-col gap-2">
+                    <button id="exportProjectBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-md">
+                        📥 Εξαγωγή Έργου
+                    </button>
+                    <button id="importProjectBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-md">
+                        📤 Εισαγωγή Έργου
+                    </button>
+                    <button id="importPricesBtn" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-md">
+                        💰 Εισαγωγή Τιμών Αγοράς
+                    </button>
+                    <input type="file" id="importProjectFile" accept=".json" style="display: none;" />
+                    <input type="file" id="importPricesFile" accept=".csv" style="display: none;" />
+                </div>
+
+                <div class="space-y-2">
+
+                    <!-- Ομάδα: Πάνελ (Collapsible) -->
+                    <div class="border rounded-md overflow-hidden">
+                        <h3 class="collapsible-header bg-gray-50 p-3 cursor-pointer flex justify-between items-center text-lg font-medium text-gray-800">
+                            <span>1. Πάνελ</span>
+                            <svg class="toggle-icon w-5 h-5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                        </h3>
+                        <div class="collapsible-content space-y-2">
+                            <div>
+                                <label for="panelPower" class="block text-sm font-medium text-gray-700">Ισχύς Πάνελ (Watt)</label>
+                                <input type="number" id="panelPower" value="640" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="panelLength" class="block text-sm font-medium text-gray-700">Μήκος Πάνελ (mm)</label>
+                                <input type="number" id="panelLength" value="2465" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="panelWidth" class="block text-sm font-medium text-gray-700">Πλάτος Πάνελ (mm)</label>
+                                <input type="number" id="panelWidth" value="1134" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="panelThickness" class="block text-sm font-medium text-gray-700">Πάχος Πάνελ (mm)</label>
+                                <input type="number" id="panelThickness" value="30" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="panelGap" class="block text-sm font-medium text-gray-700">Κενό μεταξύ Πάνελ (mm)</label>
+                                <input type="number" id="panelGap" value="20" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ομάδα: Γεωμετρία Στήριξης (ΜΕ ALIGNMENT) -->
+                    <div class="border rounded-md overflow-hidden">
+                        <h3 class="collapsible-header bg-gray-50 p-3 cursor-pointer flex justify-between items-center text-lg font-medium text-gray-800">
+                            <span>2. Γεωμετρία Στήριξης</span>
+                            <svg class="toggle-icon w-5 h-5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                        </h3>
+                        <div class="collapsible-content space-y-2">
+                            <div>
+                                <label for="alignment" class="block text-sm font-medium text-gray-700">Διάταξη (Alignment)</label>
+                                <select id="alignment" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm">
+                                    <option value="2P">2 Portrait</option>
+                                    <option value="3P">3 Portrait</option>
+                                    <option value="2L">2 Landscape</option>
+                                    <option value="3L">3 Landscape</option>
+                                    <option value="4L">4 Landscape</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="tilt" class="block text-sm font-medium text-gray-700">Κλίση (Tilt °)</label>
+                                <input type="number" id="tilt" value="20" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="frontElevation" class="block text-sm font-medium text-gray-700">Front Elevation (mm)</label>
+                                <input type="number" id="frontElevation" value="800" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="rammingDepth" class="block text-sm font-medium text-gray-700">Ramming Depth (mm)</label>
+                                <input type="number" id="rammingDepth" value="1500" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm">
+                            </div>
+                             <div>
+                                <label for="frontPoleHeight" class="block text-sm font-medium text-gray-700">Front Pole Height (mm)</label>
+                                <input type="number" id="frontPoleHeight" value="1770" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="rearPoleHeight" class="block text-sm font-medium text-gray-700">Rear Pole Height (mm)</label>
+                                <input type="number" id="rearPoleHeight" value="2770" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="inclinedBeamLength" class="block text-sm font-medium text-gray-700">Inclined Beam Length (mm)</label>
+                                <input type="number" id="inclinedBeamLength" value="3800" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ομάδα: Φορτία & Περιβάλλον -->
+                    <div class="border rounded-md overflow-hidden">
+                        <h3 class="collapsible-header bg-gray-50 p-3 cursor-pointer flex justify-between items-center text-lg font-medium text-gray-800">
+                            <span>3. Φορτία & Περιβάλλον</span>
+                            <svg class="toggle-icon w-5 h-5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                        </h3>
+                        <div class="collapsible-content space-y-2">
+                            <div>
+                                <label for="snowLoad" class="block text-sm font-medium text-gray-700">Φορτίο Χιονιού (kN/m²)</label>
+                                <input type="number" step="0.01" id="snowLoad" value="0.50" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="windLoad" class="block text-sm font-medium text-gray-700">Φορτίο Ανέμου (m/s)</label>
+                                <input type="number" step="0.01" id="windLoad" value="1.20" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="studyNumber" class="block text-sm font-medium text-gray-700">Αριθμός Προμελέτης</label>
+                                <input type="text" id="studyNumber" value="" placeholder="π.χ. PRE-2024-001" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ομάδα: Προδιαγραφές Πασσάλων -->
+                    <div class="border rounded-md overflow-hidden">
+                        <h3 class="collapsible-header bg-gray-50 p-3 cursor-pointer flex justify-between items-center text-lg font-medium text-gray-800">
+                            <span>4. Προδιαγραφές Υλικών</span>
+                            <svg class="toggle-icon w-5 h-5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                        </h3>
+                        <div class="collapsible-content space-y-2">
+                            <!-- Πίσω Πάσσαλος -->
+                            <div class="border-t pt-2">
+                                <h4 class="text-sm font-semibold text-gray-700 mb-2">Πίσω Πάσσαλος</h4>
+                                <div class="grid grid-cols-3 gap-2">
+                                    <div class="col-span-3">
+                                        <label for="rearPileProfile" class="block text-xs font-medium text-gray-600">Περιγραφή</label>
+                                        <input type="text" id="rearPileProfile" value="76x76x3 mm" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                    <div>
+                                        <label for="rearPilePrice" class="block text-xs font-medium text-gray-600">Τιμή (€/m)</label>
+                                        <input type="number" step="0.01" id="rearPilePrice" value="12.50" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                    <div class="col-span-2">
+                                        <label for="rearPileWeight" class="block text-xs font-medium text-gray-600">Βάρος (kg/m)</label>
+                                        <input type="number" step="0.01" id="rearPileWeight" value="5.40" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Εμπρός Πάσσαλος -->
+                            <div class="border-t pt-2">
+                                <h4 class="text-sm font-semibold text-gray-700 mb-2">Εμπρός Πάσσαλος</h4>
+                                <div class="grid grid-cols-3 gap-2">
+                                    <div class="col-span-3">
+                                        <label for="frontPileProfile" class="block text-xs font-medium text-gray-600">Περιγραφή</label>
+                                        <input type="text" id="frontPileProfile" value="76x76x3 mm" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                    <div>
+                                        <label for="frontPilePrice" class="block text-xs font-medium text-gray-600">Τιμή (€/m)</label>
+                                        <input type="number" step="0.01" id="frontPilePrice" value="12.50" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                    <div class="col-span-2">
+                                        <label for="frontPileWeight" class="block text-xs font-medium text-gray-600">Βάρος (kg/m)</label>
+                                        <input type="number" step="0.01" id="frontPileWeight" value="5.40" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Κεκλιμένη -->
+                            <div class="border-t pt-2">
+                                <h4 class="text-sm font-semibold text-gray-700 mb-2">Κεκλιμένη</h4>
+                                <div class="grid grid-cols-3 gap-2">
+                                    <div class="col-span-3">
+                                        <label for="inclinedProfile" class="block text-xs font-medium text-gray-600">Περιγραφή</label>
+                                        <input type="text" id="inclinedProfile" value="60x60x3 mm" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                    <div>
+                                        <label for="inclinedPrice" class="block text-xs font-medium text-gray-600">Τιμή (€/m)</label>
+                                        <input type="number" step="0.01" id="inclinedPrice" value="9.80" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                    <div class="col-span-2">
+                                        <label for="inclinedWeight" class="block text-xs font-medium text-gray-600">Βάρος (kg/m)</label>
+                                        <input type="number" step="0.01" id="inclinedWeight" value="4.20" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Τεγίδα -->
+                            <div class="border-t pt-2">
+                                <h4 class="text-sm font-semibold text-gray-700 mb-2">Τεγίδα</h4>
+                                <div class="grid grid-cols-3 gap-2">
+                                    <div class="col-span-3">
+                                        <label for="purlinProfile" class="block text-xs font-medium text-gray-600">Περιγραφή</label>
+                                        <input type="text" id="purlinProfile" value="C60x40x2.5 mm" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                    <div>
+                                        <label for="purlinPrice" class="block text-xs font-medium text-gray-600">Τιμή (€/m)</label>
+                                        <input type="number" step="0.01" id="purlinPrice" value="7.20" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                    <div class="col-span-2">
+                                        <label for="purlinWeight" class="block text-xs font-medium text-gray-600">Βάρος (kg/m)</label>
+                                        <input type="number" step="0.01" id="purlinWeight" value="2.80" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Αντιρίδα -->
+                            <div class="border-t pt-2">
+                                <h4 class="text-sm font-semibold text-gray-700 mb-2">Αντιρίδα (προαιρετικό)</h4>
+                                <div class="grid grid-cols-3 gap-2">
+                                    <div class="col-span-3">
+                                        <label for="strutProfile" class="block text-xs font-medium text-gray-600">Περιγραφή</label>
+                                        <input type="text" id="strutProfile" value="" placeholder="π.χ. 60x40x2 mm" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                    <div>
+                                        <label for="strutPrice" class="block text-xs font-medium text-gray-600">Τιμή (€/m)</label>
+                                        <input type="number" step="0.01" id="strutPrice" value="0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                    <div class="col-span-2">
+                                        <label for="strutWeight" class="block text-xs font-medium text-gray-600">Βάρος (kg/m)</label>
+                                        <input type="number" step="0.01" id="strutWeight" value="0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- FIN PLATE FRONT -->
+                            <div class="border-t pt-2">
+                                <h4 class="text-sm font-semibold text-gray-700 mb-2">FIN PLATE FRONT</h4>
+                                <div class="grid grid-cols-3 gap-2">
+                                    <div class="col-span-3">
+                                        <label for="finPlateFrontProfile" class="block text-xs font-medium text-gray-600">Περιγραφή</label>
+                                        <input type="text" id="finPlateFrontProfile" value="15x45x55x4mm L260mm" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                    <div>
+                                        <label for="finPlateFrontPrice" class="block text-xs font-medium text-gray-600">Τιμή Τεμαχίου</label>
+                                        <input type="number" step="0.01" id="finPlateFrontPrice" value="12.50" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                    <div class="col-span-2">
+                                        <label for="finPlateFrontWeight" class="block text-xs font-medium text-gray-600">Βάρος (kg/τεμ)</label>
+                                        <input type="number" step="0.01" id="finPlateFrontWeight" value="0.85" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- FIN PLATE BACK -->
+                            <div class="border-t pt-2">
+                                <h4 class="text-sm font-semibold text-gray-700 mb-2">FIN PLATE BACK</h4>
+                                <div class="grid grid-cols-3 gap-2">
+                                    <div class="col-span-3">
+                                        <label for="finPlateBackProfile" class="block text-xs font-medium text-gray-600">Περιγραφή</label>
+                                        <input type="text" id="finPlateBackProfile" value="40x15x20x40x3mm L260mm" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                    <div>
+                                        <label for="finPlateBackPrice" class="block text-xs font-medium text-gray-600">Τιμή Τεμαχίου</label>
+                                        <input type="number" step="0.01" id="finPlateBackPrice" value="15.80" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                    <div class="col-span-2">
+                                        <label for="finPlateBackWeight" class="block text-xs font-medium text-gray-600">Βάρος (kg/τεμ)</label>
+                                        <input type="number" step="0.01" id="finPlateBackWeight" value="1.15" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="border-t pt-2">
+                                <label for="steelGrade" class="block text-sm font-medium text-gray-700">Ποιότητα Χάλυβα</label>
+                                <select id="steelGrade" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm">
+                                    <option value="S235">S235</option>
+                                    <option value="S275">S275</option>
+                                    <option value="S355">S355</option>
+                                    <option value="S420">S420</option>
+                                    <option value="custom">Άλλο (καταχώρηση)</option>
+                                </select>
+                            </div>
+                            <div id="customSteelGradeDiv" style="display: none;">
+                                <label for="customSteelGrade" class="block text-sm font-medium text-gray-700">Καταχώρηση Ποιότητας</label>
+                                <input type="text" id="customSteelGrade" placeholder="π.χ. S460" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="coating" class="block text-sm font-medium text-gray-700">Coating</label>
+                                <select id="coating" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm">
+                                    <option value="HDG ISO 1461">HDG ISO 1461</option>
+                                    <option value="Magnelis">Magnelis</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- Αποτελέσματα -->
+            <div class="lg:col-span-2">
+                
+                <!-- Διάταξη Τραπεζιών/Πάνελ (ΜΕΤΑΚΙΝΗΜΕΝΟ ΑΠΟ ΑΡΙΣΤΕΡΑ) -->
+                <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                    <div class="flex justify-between items-center mb-4 border-b pb-2">
+                        <h2 class="text-xl font-semibold text-gray-900">2. Διάταξη Τραπεζιών/Πάνελ</h2>
+                        <button id="addTableBtn" class="btn-alumil-primary px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                            + Προσθήκη Τραπεζιού
+                        </button>
+                    </div>
+                    <!-- Overflow για scroll -->
+                    <div class="overflow-x-auto">
+                        <div id="tablesContainer">
+                            <!-- Headers -->
+                            <div class="tables-grid tables-header">
+                                <div>No</div>
+                                <div>Table</div>
+                                <div>Qty</div>
+                                <div>Length (m)</div>
+                                <div>Mid Qty</div>
+                                <div>Mid (m)</div>
+                                <div>Edge (m)</div>
+                                <div>Overhang (mm)</div>
+                                <div>Winds.</div>
+                                <div>Τεγίδες</div>
+                                <div></div>
+                            </div>
+                            <!-- Rows θα προστεθούν δυναμικά -->
+                            <div id="tablesRows"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Σύνοψη -->
+                <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                    <h2 class="text-xl font-semibold mb-4 border-b pb-2">Σύνοψη Συστήματος</h2>
+                    <div id="summaryContainer" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="text-sm">
+                            <span class="block font-medium text-gray-500">Σύνολο Πάνελ</span>
+                            <span class="block text-lg font-semibold text-gray-900">-</span>
+                        </div>
+                        <div class="text-sm">
+                            <span class="block font-medium text-gray-500">Συνολική Ισχύς</span>
+                            <span class="block text-lg font-semibold text-gray-900">-</span>
+                        </div>
+                        <div class="text-sm">
+                            <span class="block font-medium text-gray-500">Συνολικά Τραπέζια</span>
+                            <span class="block text-lg font-semibold text-green-700">-</span>
+                        </div>
+                        <div class="text-sm border-l-2 border-yellow-500 pl-3">
+                            <span class="block font-medium text-yellow-700">Προμήθεια TafOffice</span>
+                            <span class="block text-lg font-semibold text-yellow-900">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ενότητα Markup & Υπολογισμός -->
+                <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                        <!-- Αριστερά: Markup % -->
+                        <div>
+                            <label for="markupPercent" class="block text-sm font-medium text-gray-700 mb-2">Markup % (Τιμή Πώλησης)</label>
+                            <input type="number" step="0.1" id="markupPercent" value="20" placeholder="π.χ. 20" 
+                                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                            <p class="mt-1 text-xs text-gray-500">Το ποσοστό κέρδους που θα προστεθεί στην τιμή κόστους</p>
+                        </div>
+                        
+                        <!-- Κέντρο: Κουμπί Υπολογισμού BoM -->
+                        <div class="flex justify-center">
+                            <button id="calculateBtn" class="btn-alumil-primary px-6 py-3 rounded-md font-medium transition-colors text-lg shadow-md hover:shadow-lg">
+                                Υπολογισμός BoM
+                            </button>
+                        </div>
+                        
+                        <!-- Δεξιά: Τελική Τιμή Πώλησης (εμφανίζεται μετά τον υπολογισμό) -->
+                        <div id="finalPriceContainer" class="hidden">
+                            <div class="text-center md:text-right">
+                                <span class="block text-sm font-medium text-blue-700 mb-1">ΤΕΛΙΚΗ ΤΙΜΗ ΠΩΛΗΣΗΣ</span>
+                                <span id="finalPriceDisplay" class="block text-2xl font-bold text-blue-900">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Πίνακας BoM -->
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <div class="flex justify-between items-center mb-4 border-b pb-2">
+                        <h2 class="text-xl font-semibold">Bill of Materials (BoM)</h2>
+                        <button id="exportCsvBtn" disabled class="btn-alumil-secondary disabled:bg-gray-400 disabled:cursor-not-allowed px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                            Εξαγωγή CSV
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Κωδικός</th>
+                                    <th class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Περιγραφή</th>
+                                    <th class="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ποσότητα</th>
+                                    <th class="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Μονάδα</th>
+                                    <th class="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Τιμή Αγοράς (€)</th>
+                                    <th class="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Κόστος (€)</th>
+                                    <th class="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Τιμή Πώλησης (€)</th>
+                                    <th class="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Αξία (€)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bomTableBody" class="bg-white divide-y divide-gray-200">
+                                <tr>
+                                    <td colspan="8" class="px-4 py-6 text-center text-gray-500">Δεν έχουν υπολογιστεί υλικά ακόμη.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Modal για Τεγίδες -->
+    <div id="purlinModal" class="modal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold">Μήκη Τεγίδων - Τραπέζι <span id="modalTableNo">1</span></h3>
+                <button onclick="closePurlinModal()" class="text-gray-500 hover:text-gray-700 text-2xl font-bold">&times;</button>
+            </div>
+            
+            <div class="mb-4 p-3 bg-blue-50 rounded-md text-sm">
+                <strong>Διάταξη Τραπεζιού:</strong><br>
+                Overhang: <span id="modalOverhang">-</span>mm → 
+                Edge: <span id="modalEdge">-</span>m → 
+                Mid Spans (<span id="modalMidQty">-</span>x): <span id="modalMid">-</span>m → 
+                Edge: <span id="modalEdgeR">-</span>m → 
+                Overhang: <span id="modalOverhangR">-</span>mm<br>
+                <strong>Συνολικό Μήκος:</strong> <span id="modalTotalLength">-</span>m<br>
+                <strong>Ιδανικό Μήκος Τεγίδων:</strong> <span id="modalIdealLength">-</span>m (Συνολικό + 10cm)<br>
+                <span class="text-xs text-gray-600">💡 Tip: Αν βάλεις μήκος που είναι πολλαπλάσιο του Mid Span, θα πέφτει στο ίδιο % του επόμενου span!</span>
+            </div>
+            
+            <div id="purlinSummary" class="mb-4 p-3 rounded-md text-sm font-medium">
+                <!-- Θα συμπληρωθεί δυναμικά -->
+            </div>
+            
+            <div id="purlinsList">
+                <div class="purlin-row purlin-header">
+                    <div>No</div>
+                    <div>Μήκος (m)</div>
+                    <div>Θέση Έναρξης (m)</div>
+                    <div>Θέση Λήξης / Ανοιγμα</div>
+                    <div></div>
+                </div>
+                <div id="purlinsRows"></div>
+            </div>
+            
+            <div class="mt-4 flex gap-2">
+                <button onclick="addPurlinToModal()" class="btn-alumil-primary px-4 py-2 rounded-md text-sm font-medium">
+                    + Προσθήκη Τεγίδας
+                </button>
+                <button onclick="closePurlinModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm font-medium">
+                    Κλείσιμο
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- REFERENCES ---
+        const panelPowerInput = document.getElementById('panelPower');
+        const panelLengthInput = document.getElementById('panelLength');
+        const panelWidthInput = document.getElementById('panelWidth');
+        const panelThicknessInput = document.getElementById('panelThickness');
+        const panelGapInput = document.getElementById('panelGap');
+        
+        const alignmentInput = document.getElementById('alignment');
+        const tiltInput = document.getElementById('tilt');
+        const frontElevationInput = document.getElementById('frontElevation');
+        const rammingDepthInput = document.getElementById('rammingDepth');
+        const frontPoleHeightInput = document.getElementById('frontPoleHeight');
+        const rearPoleHeightInput = document.getElementById('rearPoleHeight');
+        const inclinedBeamLengthInput = document.getElementById('inclinedBeamLength');
+        
+        const snowLoadInput = document.getElementById('snowLoad');
+        const windLoadInput = document.getElementById('windLoad');
+        const studyNumberInput = document.getElementById('studyNumber');
+        
+        const rearPileProfileInput = document.getElementById('rearPileProfile');
+        const frontPileProfileInput = document.getElementById('frontPileProfile');
+        const inclinedProfileInput = document.getElementById('inclinedProfile');
+        const purlinProfileInput = document.getElementById('purlinProfile');
+        const strutProfileInput = document.getElementById('strutProfile');
+        const finPlateFrontProfileInput = document.getElementById('finPlateFrontProfile');
+        const finPlateBackProfileInput = document.getElementById('finPlateBackProfile');
+        const steelGradeInput = document.getElementById('steelGrade');
+        const customSteelGradeInput = document.getElementById('customSteelGrade');
+        const coatingInput = document.getElementById('coating');
+        
+        const calculateBtn = document.getElementById('calculateBtn');
+        const exportCsvBtn = document.getElementById('exportCsvBtn');
+        const summaryDiv = document.getElementById('summaryContainer');
+        const bomTableBody = document.getElementById('bomTableBody');
+        
+        const addTableBtn = document.getElementById('addTableBtn');
+        const tablesRowsContainer = document.getElementById('tablesRows');
+
+        let currentBom = [];
+        let tableRowsData = []; // Αποθήκευση δεδομένων τραπεζιών
+        let tableRowCounter = 1;
+        let currentEditingTableId = null; // Για το modal των τεγίδων
+        let currentTotalPower = 0; // Συνολική ισχύς έργου σε kWp
+
+        // --- EVENT LISTENERS ---
+        calculateBtn.addEventListener('click', calculateBoM);
+        exportCsvBtn.addEventListener('click', exportCSV);
+        
+        // Event listeners για εξαγωγή/εισαγωγή έργου
+        document.getElementById('exportProjectBtn').addEventListener('click', exportProject);
+        document.getElementById('importProjectBtn').addEventListener('click', () => {
+            document.getElementById('importProjectFile').click();
+        });
+        document.getElementById('importProjectFile').addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                importProject(e.target.files[0]);
+                e.target.value = ''; // Reset input
+            }
+        });
+        
+        // Event listeners για εισαγωγή τιμών
+        document.getElementById('importPricesBtn').addEventListener('click', () => {
+            document.getElementById('importPricesFile').click();
+        });
+        document.getElementById('importPricesFile').addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                importPrices(e.target.files[0]);
+                e.target.value = ''; // Reset input
+            }
+        });
+        addTableBtn.addEventListener('click', addTableRow);
+        
+        // Toggle custom steel grade input
+        steelGradeInput.addEventListener('change', function() {
+            const customDiv = document.getElementById('customSteelGradeDiv');
+            if (this.value === 'custom') {
+                customDiv.style.display = 'block';
+            } else {
+                customDiv.style.display = 'none';
+            }
+        });
+
+        // --- COLLAPSIBLE MENUS ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const headers = document.querySelectorAll('.collapsible-header');
+            headers.forEach(header => {
+                const content = header.nextElementSibling;
+                const icon = header.querySelector('.toggle-icon');
+
+                // Κρύβουμε αρχικά τις ενότητες 3, 4
+                const headerText = header.querySelector('span').innerText;
+                if (!headerText.startsWith('1.') && !headerText.startsWith('2.')) {
+                    content.classList.add('hidden');
+                    icon.classList.add('rotate-180');
+                }
+
+                header.addEventListener('click', () => {
+                    content.classList.toggle('hidden');
+                    icon.classList.toggle('rotate-180');
+                });
+            });
+            
+            // Προσθήκη πρώτης γραμμής τραπεζιού
+            addTableRow();
+        });
+
+        // --- ΔΙΑΧΕΙΡΙΣΗ ΠΙΝΑΚΑ ΤΡΑΠΕΖΙΩΝ ---
+        function addTableRow() {
+            const rowData = {
+                id: tableRowCounter++,
+                table: 10,
+                qty: 1,
+                tableLength: 0,
+                midSpansQty: 3,
+                midSpan: 4.0,
+                edgeSpan: 2.0,
+                overhang: 0,
+                purlins: [], // Array για τεγίδες
+                windshields: 0
+            };
+            
+            tableRowsData.push(rowData);
+            renderTableRows();
+        }
+
+        function removeTableRow(id) {
+            tableRowsData = tableRowsData.filter(row => row.id !== id);
+            renderTableRows();
+        }
+
+        function updateTableRow(id, field, value) {
+            const row = tableRowsData.find(r => r.id === id);
+            if (row) {
+                row[field] = parseFloat(value) || 0;
+                calculateTableMetrics(row);
+                renderTableRows();
+            }
+        }
+
+        function calculateTableMetrics(row) {
+            const panelWidth = parseFloat(panelWidthInput.value) || 0;
+            const panelLength = parseFloat(panelLengthInput.value) || 0;
+            const panelGap = parseFloat(panelGapInput.value) || 0;
+            const alignment = alignmentInput.value;
+            
+            const isPortrait = alignment.includes('P');
+            
+            // Υπολογισμός Table Length σε χιλιοστά
+            let tableLengthMm;
+            if (isPortrait) {
+                tableLengthMm = panelWidth * row.table + (row.table + 1) * panelGap;
+            } else {
+                tableLengthMm = panelLength * row.table + (row.table - 1) * panelGap;
+            }
+            
+            // Μετατροπή σε μέτρα
+            row.tableLength = tableLengthMm / 1000;
+            
+            // Υπολογισμός Overhang σε χιλιοστά
+            const tableLengthForOverhang = tableLengthMm;
+            const midSpansTotal = row.midSpansQty * (row.midSpan * 1000);
+            const edgeSpansTotal = row.edgeSpan * 2 * 1000;
+            
+            row.overhang = (tableLengthForOverhang - midSpansTotal - edgeSpansTotal) / 2;
+        }
+
+        function getOverhangColor(overhang, edgeSpan) {
+            const optimalOverhang = (edgeSpan * 1000) / 3; // Edge/3 σε mm
+            const difference = Math.abs(overhang - optimalOverhang);
+            const percentageDiff = (difference / optimalOverhang) * 100;
+            
+            // Χρωματισμός με βάση την απόκλιση από το βέλτιστο
+            if (percentageDiff <= 10) {
+                // Πολύ κοντά στο βέλτιστο (±10%)
+                return 'background-color: #d1fae5; border-color: #10b981;'; // Πράσινο
+            } else if (percentageDiff <= 25) {
+                // Αποδεκτό (10-25%)
+                return 'background-color: #fef3c7; border-color: #f59e0b;'; // Κίτρινο
+            } else {
+                // Μακριά από το βέλτιστο (>25%)
+                return 'background-color: #fee2e2; border-color: #ef4444;'; // Κόκκινο
+            }
+        }
+        
+        function renderTableRows() {
+            let html = '';
+            
+            tableRowsData.forEach((row, index) => {
+                const purlinCount = row.purlins.length;
+                const overhangColor = getOverhangColor(row.overhang, row.edgeSpan);
+                html += `
+                    <div class="tables-grid" style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                        <div class="text-center font-medium text-gray-700">${index + 1}</div>
+                        <input type="number" value="${row.table}" onchange="updateTableRow(${row.id}, 'table', this.value)" />
+                        <input type="number" value="${row.qty}" onchange="updateTableRow(${row.id}, 'qty', this.value)" />
+                        <input type="number" value="${row.tableLength.toFixed(2)}" class="read-only" readonly />
+                        <input type="number" value="${row.midSpansQty}" onchange="updateTableRow(${row.id}, 'midSpansQty', this.value)" />
+                        <input type="number" step="0.001" value="${row.midSpan.toFixed(3)}" onchange="updateTableRow(${row.id}, 'midSpan', this.value)" />
+                        <input type="number" step="0.001" value="${row.edgeSpan.toFixed(3)}" onchange="updateTableRow(${row.id}, 'edgeSpan', this.value)" />
+                        <input type="number" value="${Math.round(row.overhang)}" class="read-only" readonly style="${overhangColor}" title="Βέλτιστο: ${Math.round((row.edgeSpan * 1000) / 3)}mm (Edge/3)" />
+                        <input type="number" value="${row.windshields}" onchange="updateTableRow(${row.id}, 'windshields', this.value)" />
+                        <button onclick="openPurlinModal(${row.id})" class="btn-alumil-secondary px-2 py-1 rounded text-xs" title="Επεξεργασία Τεγίδων">
+                            📝 ${purlinCount}
+                        </button>
+                        <button onclick="removeTableRow(${row.id})" class="text-red-600 hover:text-red-800 font-bold text-lg" title="Διαγραφή">×</button>
+                    </div>
+                `;
+            });
+            
+            tablesRowsContainer.innerHTML = html;
+        }
+
+        function calculateBoM() {
+            // 1. Έλεγχος δεδομένων
+            if (tableRowsData.length === 0) {
+                alert('Προσθέστε τουλάχιστον ένα τραπέζι!');
+                return;
+            }
+
+            // 2. Υπολογισμοί βάσης
+            const alignment = alignmentInput.value;
+            const alignmentNum = parseInt(alignment.charAt(0)); // 2, 3, ή 4
+            const isPortrait = alignment.includes('P');
+            
+            let totalTables = 0;
+            let totalPanels = 0;
+            let totalWindshields = 0;
+            let totalMidQty = 0;
+            let totalCoreQty = 0;
+            
+            // Για τις τεγίδες - συλλογή όλων των μηκών
+            const purlinLengthsMap = new Map(); // Map για ομαδοποίηση ανά μήκος
+            
+            // Υπολογισμός συντελεστή πολλαπλασιασμού για τεγίδες
+            let purlinMultiplier;
+            if (isPortrait) {
+                purlinMultiplier = alignmentNum * 2; // Portrait: Διάταξη × 2
+            } else {
+                purlinMultiplier = alignmentNum + 1; // Landscape: (Διάταξη + 1)
+            }
+            
+            let totalBackPiles = 0;
+            let totalFrontPiles = 0;
+            let totalInclinedBeams = 0;
+            let totalBrackets = 0;
+            let totalFinPlates = 0;
+            
+            tableRowsData.forEach(row => {
+                totalTables += row.qty;
+                const panelsPerTable = alignmentNum * row.table;
+                totalPanels += panelsPerTable * row.qty;
+                
+                totalWindshields += row.windshields * row.qty;
+                totalMidQty += row.midSpansQty * row.qty;
+                
+                // Υπολογισμός πασσάλων/beams για αυτό το τραπέζι
+                const pilesPerTable = (row.midSpansQty + 3) * row.qty;
+                totalBackPiles += pilesPerTable;
+                totalFrontPiles += pilesPerTable;
+                totalInclinedBeams += pilesPerTable;
+                totalBrackets += pilesPerTable;
+                totalFinPlates += pilesPerTable;
+                
+                // Υπολογισμός CORE: Διάταξη × 2 × Qty × (τεγίδες στο modal - 1)
+                const purlinCount = row.purlins.length;
+                if (purlinCount > 0) {
+                    totalCoreQty += purlinMultiplier * row.qty * (purlinCount - 1);
+                }
+                
+                // Συλλογή μηκών τεγίδων με πολλαπλασιασμό
+                row.purlins.forEach(purlin => {
+                    const lengthMm = Math.round(purlin.length * 1000); // Μετατροπή σε mm
+                    const currentQty = purlinLengthsMap.get(lengthMm) || 0;
+                    // Πολλαπλασιάζω με τον συντελεστή Portrait/Landscape και την ποσότητα
+                    purlinLengthsMap.set(lengthMm, currentQty + (purlinMultiplier * row.qty));
+                });
+            });
+            
+            const panelPower = parseFloat(panelPowerInput.value) || 0;
+            const totalPower = (totalPanels * panelPower) / 1000; // kWp
+            currentTotalPower = totalPower; // Αποθήκευση για υπολογισμό προμήθειας
+            
+            // Υπολογισμός μηκών πασσάλων
+            const rearPoleHeight = parseFloat(rearPoleHeightInput.value) || 0;
+            const frontPoleHeight = parseFloat(frontPoleHeightInput.value) || 0;
+            const rammingDepth = parseFloat(rammingDepthInput.value) || 0;
+            
+            const backPileLength = rearPoleHeight + rammingDepth;
+            const frontPileLength = frontPoleHeight + rammingDepth;
+            
+            // Υπολογισμός μήκους καλωδίου
+            const avgMidSpan = tableRowsData.length > 0 
+                ? tableRowsData.reduce((sum, r) => sum + r.midSpan * r.qty, 0) / totalTables 
+                : 0;
+            const wireRopeLength = Math.sqrt(Math.pow((rearPoleHeight - 270) / 1000, 2) + Math.pow(avgMidSpan, 2)) + 0.3;
+            
+            // 3. Δημιουργία BoM
+            currentBom = [];
+            
+            // === PURLINS - Ομαδοποιημένες ανά μήκος ===
+            const purlinProfile = purlinProfileInput.value || 'Τεγίδα';
+            purlinLengthsMap.forEach((qty, lengthMm) => {
+                currentBom.push({
+                    code: 'PURLIN-' + lengthMm,
+                    description: `${purlinProfile} LENGTH ${lengthMm}mm`,
+                    qty: qty,
+                    unit: 'ΤΕΜ',
+                    price: (lengthMm / 1000) * (parseFloat(document.getElementById('purlinPrice').value) || 7.20)
+                });
+            });
+            
+            // === CORE U70x50 ===
+            if (totalCoreQty > 0) {
+                currentBom.push({
+                    code: 'EX-89697050300',
+                    description: 'CORE U70x50',
+                    qty: totalCoreQty,
+                    unit: 'ΤΕΜ',
+                    price: getPrice('EX-89697050300', 3.50)
+                });
+            }
+            
+            // === WASHER DIN 9021 A2 8.4 - ΔΙΟΡΘΩΜΕΝΟ: x2 ===
+            currentBom.push({
+                code: 'EX-8540685101',
+                description: 'WASHER DIN 9021 A2 8.4',
+                qty: roundUpQuantity(Math.ceil(totalPanels * 4 * 1.01 * 2), 'EX-8540685101'),
+                unit: 'ΤΕΜ',
+                price: getPrice('EX-8540685101', 0.15)
+            });
+            
+            // === SERRATED LOCK WASHER - ΑΦΑΙΡΕΘΗΚΕ ===
+            
+            // === HEXAGON METRIC SCREW DIN933 INOX A2 M8x20 ===
+            currentBom.push({
+                code: 'EX-7622802001',
+                description: 'HEXAGON METRIC SCREW DIN933 INOX A2 M8x20',
+                qty: roundUpQuantity(Math.ceil(totalPanels * 4 * 1.01), 'EX-7622802001'),
+                unit: 'ΤΕΜ',
+                price: getPrice('EX-7622802001', 0.25)
+            });
+            
+            // Υπολογισμός συνολικής ποσότητας τεγίδων
+            const totalPurlinsQty = purlinLengthsMap.size > 0 
+                ? Array.from(purlinLengthsMap.values()).reduce((a, b) => a + b, 0) 
+                : 0;
+            
+            // === HEXAGON NUT DIN6923 M8 - ΔΙΟΡΘΩΜΕΝΟ ===
+            const hexNutQty = roundUpQuantity(
+                Math.ceil(
+                    (totalPanels * 4 * 1.01) + 
+                    (totalCoreQty * 2) + 
+                    (totalPurlinsQty * 4)
+                ),
+                'EX-8968808201'
+            );
+            currentBom.push({
+                code: 'EX-8968808201',
+                description: 'HEXAGON NUT DIN6923 M8 WITH SERRATION M8 INOX',
+                qty: hexNutQty,
+                unit: 'ΤΕΜ',
+                price: getPrice('EX-8968808201', 0.18)
+            });
+            
+            // === WASHER DIN 9021 A2 15.0 ===
+            currentBom.push({
+                code: 'EX-8540685151',
+                description: 'WASHER DIN 9021 A2 15.0',
+                qty: roundUpQuantity(totalBackPiles * 6, 'EX-8540685151'),
+                unit: 'ΤΕΜ',
+                price: getPrice('EX-8540685151', 0.22)
+            });
+            
+            // === HEX HEAD BOLT DIN6921-H-M14x80mm A2 INOX ===
+            currentBom.push({
+                code: 'EX-7622140301',
+                description: 'HEX HEAD BOLT DIN6921-H-M14x80mm A2 INOX',
+                qty: roundUpQuantity(totalBackPiles * 6, 'EX-7622140301'),
+                unit: 'ΤΕΜ',
+                price: getPrice('EX-7622140301', 1.80)
+            });
+            
+            // === HEXAGON NUT DIN934 M14 INOX ===
+            currentBom.push({
+                code: 'EX-8968014201',
+                description: 'HEXAGON NUT DIN934 M14 INOX',
+                qty: roundUpQuantity(totalBackPiles * 6, 'EX-8968014201'),
+                unit: 'ΤΕΜ',
+                price: getPrice('EX-8968014201', 0.35)
+            });
+            
+            // === HEXAGON BOLT ISO4017/DIN933 M8x30 - ΔΙΟΡΘΩΜΕΝΟ: Χωρίς διπλή ποσότητα ===
+            const hexBoltM8x30Qty = totalCoreQty * 2 + totalPurlinsQty * 4;
+            currentBom.push({
+                code: 'EX-7622803001',
+                description: 'HEXAGON BOLT ISO4017/DIN933 M8x30 A2 INOX',
+                qty: roundUpQuantity(hexBoltM8x30Qty, 'EX-7622803001'),
+                unit: 'ΤΕΜ',
+                price: getPrice('EX-7622803001', 0.32)
+            });
+            
+            // === ΑΝΤΙΑΝΕΜΙΚΑ ===
+            const turnbuckleQty = totalWindshields * 2;
+            
+            if (turnbuckleQty > 0) {
+                // LIFTING EYE BOLTS DIN580 M8 A4 INOX
+                currentBom.push({
+                    code: 'EX-8960005801',
+                    description: 'LIFTING EYE BOLTS DIN580 M8 A4 INOX',
+                    qty: roundUpQuantity(turnbuckleQty * 2, 'EX-8960005801'),
+                    unit: 'ΤΕΜ',
+                    price: getPrice('EX-8960005801', 2.50)
+                });
+                
+                // TURNBUCKLE EYE HOOK M8 A4 INOX TYPEC
+                currentBom.push({
+                    code: 'EX-8960005111',
+                    description: 'TURNBUCKLE EYE HOOK M8 A4 INOX TYPEC',
+                    qty: roundUpQuantity(turnbuckleQty, 'EX-8960005111'),
+                    unit: 'ΤΕΜ',
+                    price: getPrice('EX-8960005111', 4.20)
+                });
+                
+                // WIRE ROPE CLIP DIN 741 F4 A4 INOX
+                currentBom.push({
+                    code: 'EX-8960005301',
+                    description: 'WIRE ROPE CLIP DIN 741 F4 A4 INOX',
+                    qty: roundUpQuantity(turnbuckleQty * 2, 'EX-8960005301'),
+                    unit: 'ΤΕΜ',
+                    price: getPrice('EX-8960005301', 1.80)
+                });
+                
+                // WIRE ROPE 7X7 TOUGH 4mm A4 INOX
+                currentBom.push({
+                    code: 'EX-8960006401',
+                    description: 'WIRE ROPE 7X7 TOUGH 4mm A4 INOX',
+                    qty: roundUpQuantity(parseFloat((totalWindshields * 2 * wireRopeLength).toFixed(2)), 'EX-8960006401'),
+                    unit: 'M',
+                    price: getPrice('EX-8960006401', 3.80)
+                });
+            }
+            
+            // === ΔΟΜΙΚΑ ΣΤΟΙΧΕΙΑ ===
+            
+            // BACK PILE
+            const backPileProfile = rearPileProfileInput.value || 'Πίσω Πάσσαλος';
+            currentBom.push({
+                code: 'BACKPILE',
+                description: `${backPileProfile} L=${backPileLength}mm`,
+                qty: totalBackPiles,
+                unit: 'ΤΕΜ',
+                price: (backPileLength / 1000) * (parseFloat(document.getElementById('rearPilePrice').value) || 12.50)
+            });
+            
+            // FRONT PILE
+            const frontPileProfile = frontPileProfileInput.value || 'Εμπρός Πάσσαλος';
+            currentBom.push({
+                code: 'FRONTPILE',
+                description: `${frontPileProfile} L=${frontPileLength}mm`,
+                qty: totalFrontPiles,
+                unit: 'ΤΕΜ',
+                price: (frontPileLength / 1000) * (parseFloat(document.getElementById('frontPilePrice').value) || 12.50)
+            });
+            
+            // INCLINED BEAM
+            const inclinedProfile = inclinedProfileInput.value || 'Κεκλιμένη';
+            const inclinedLength = parseFloat(inclinedBeamLengthInput.value) || 3800;
+            currentBom.push({
+                code: 'INCLINED-BEAM',
+                description: `${inclinedProfile} L=${inclinedLength}mm`,
+                qty: totalInclinedBeams,
+                unit: 'ΤΕΜ',
+                price: (inclinedLength / 1000) * (parseFloat(document.getElementById('inclinedPrice').value) || 9.80)
+            });
+            
+            // BRACKET (Αντιρίδα) - μόνο αν έχει οριστεί
+            const strutProfile = strutProfileInput.value;
+            if (strutProfile && strutProfile.trim() !== '') {
+                const strutLength = 2100; // Placeholder
+                const strutPrice = parseFloat(document.getElementById('strutPrice').value) || 0;
+                if (strutPrice > 0) {
+                    currentBom.push({
+                        code: 'BRACKET',
+                        description: `${strutProfile} L=${strutLength}mm`,
+                        qty: totalBrackets,
+                        unit: 'ΤΕΜ',
+                        price: (strutLength / 1000) * strutPrice
+                    });
+                }
+            }
+            
+            // FIN PLATE FRONT
+            const finPlateFrontProfile = finPlateFrontProfileInput.value;
+            currentBom.push({
+                code: 'FIN-PLATE-FRONT',
+                description: finPlateFrontProfile,
+                qty: totalFinPlates,
+                unit: 'ΤΕΜ',
+                price: parseFloat(document.getElementById('finPlateFrontPrice').value) || 12.50
+            });
+            
+            // FIN PLATE BACK
+            const finPlateBackProfile = finPlateBackProfileInput.value;
+            currentBom.push({
+                code: 'FIN-PLATE-BACK',
+                description: finPlateBackProfile,
+                qty: totalFinPlates,
+                unit: 'ΤΕΜ',
+                price: parseFloat(document.getElementById('finPlateBackPrice').value) || 15.80
+            });
+
+            // 4. Ενημέρωση UI
+            const tafCommission = calculateTafOfficeCommission(totalPower);
+            summaryDiv.innerHTML = `
+                <div class="text-sm">
+                    <span class="block font-medium text-gray-500">Σύνολο Πάνελ</span>
+                    <span class="block text-lg font-semibold text-gray-900">${totalPanels} ΤΕΜ</span>
+                </div>
+                <div class="text-sm">
+                    <span class="block font-medium text-gray-500">Συνολική Ισχύς</span>
+                    <span class="block text-lg font-semibold text-gray-900">${totalPower.toFixed(2)} kWp</span>
+                </div>
+                <div class="text-sm">
+                    <span class="block font-medium text-gray-500">Συνολικά Τραπέζια</span>
+                    <span class="block text-lg font-semibold text-green-700">${totalTables} ΤΕΜ</span>
+                </div>
+                <div class="text-sm border-l-2 border-yellow-500 pl-3">
+                    <span class="block font-medium text-yellow-700">Προμήθεια TafOffice</span>
+                    <span class="block text-lg font-semibold text-yellow-900">${formatCurrency(tafCommission)} €</span>
+                </div>
+            `;
+
+            renderTable();
+            exportCsvBtn.disabled = false;
+        }
+
+        function formatCurrency(value) {
+            return new Intl.NumberFormat('el-GR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(value);
+        }
+        
+        function calculateTafOfficeCommission(kWp) {
+            if (kWp <= 1000) {
+                return 1000;
+            } else if (kWp <= 10000) {
+                return 0.5 * kWp;
+            } else {
+                return 0.3 * kWp;
+            }
+        }
+
+        function renderTable() {
+            if (currentBom.length === 0) {
+                bomTableBody.innerHTML = `<tr><td colspan="8" class="px-4 py-6 text-center text-gray-500">Δεν βρέθηκαν υλικά.</td></tr>`;
+                return;
+            }
+
+            const markup = parseFloat(document.getElementById('markupPercent').value) || 0;
+            const markupMultiplier = 1 + (markup / 100);
+
+            let html = '';
+            let grandTotalCost = 0;
+            let grandTotalPrice = 0;
+            
+            currentBom.forEach(item => {
+                const costPrice = item.qty * item.price;
+                const sellPrice = item.price * markupMultiplier;
+                const totalSellPrice = costPrice * markupMultiplier;
+                
+                grandTotalCost += costPrice;
+                grandTotalPrice += totalSellPrice;
+                
+                html += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${item.code}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${item.description}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-semibold text-right">${item.qty}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">${item.unit}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900 text-right">${formatCurrency(item.price)} €</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-semibold text-right">${formatCurrency(costPrice)} €</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-blue-700 text-right">${formatCurrency(sellPrice)} €</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-blue-900 font-semibold text-right">${formatCurrency(totalSellPrice)} €</td>
+                    </tr>
+                `;
+            });
+            
+            const profit = grandTotalPrice - grandTotalCost;
+            const tafOfficeCommission = calculateTafOfficeCommission(currentTotalPower);
+            const finalPriceWithCommission = grandTotalPrice + tafOfficeCommission;
+            
+            // Προσθήκη γραμμών συνόλου
+            html += `
+                <tr class="bg-gray-100 font-bold border-t-2 border-gray-300">
+                    <td colspan="5" class="px-4 py-3 text-right text-sm text-gray-900">ΣΥΝΟΛΙΚΟ ΚΟΣΤΟΣ ΑΓΟΡΑΣ:</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900 text-right">${formatCurrency(grandTotalCost)} €</td>
+                    <td colspan="2" class="px-4 py-3 text-right text-sm text-gray-700">Markup: ${markup}%</td>
+                </tr>
+                <tr class="bg-green-100 font-bold">
+                    <td colspan="5" class="px-4 py-3 text-right text-sm text-green-900">ΚΕΡΔΟΣ:</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-green-900 text-right">${formatCurrency(profit)} €</td>
+                    <td colspan="2" class="px-4 py-3 text-right text-sm text-green-700">(${markup}% του κόστους)</td>
+                </tr>
+                <tr class="bg-gray-50 font-bold border-t border-gray-300">
+                    <td colspan="5" class="px-4 py-3 text-right text-sm text-gray-900">ΤΙΜΗ ΠΩΛΗΣΗΣ (χωρίς προμήθεια):</td>
+                    <td colspan="3" class="px-4 py-3 whitespace-nowrap text-sm text-gray-900 text-right">${formatCurrency(grandTotalPrice)} €</td>
+                </tr>
+                <tr class="bg-yellow-100 font-bold">
+                    <td colspan="5" class="px-4 py-3 text-right text-sm text-yellow-900">ΠΡΟΜΗΘΕΙΑ TafOffice:</td>
+                    <td colspan="3" class="px-4 py-3 whitespace-nowrap text-sm text-yellow-900 text-right">${formatCurrency(tafOfficeCommission)} €</td>
+                </tr>
+                <tr class="bg-blue-100 font-bold text-lg border-t-2 border-blue-300">
+                    <td colspan="5" class="px-4 py-4 text-right text-blue-900">ΤΕΛΙΚΗ ΤΙΜΗ ΠΩΛΗΣΗΣ (με προμήθεια):</td>
+                    <td colspan="3" class="px-4 py-4 whitespace-nowrap text-blue-900 text-right">${formatCurrency(finalPriceWithCommission)} €</td>
+                </tr>
+            `;
+            
+            bomTableBody.innerHTML = html;
+            
+            // Ενημέρωση του finalPriceDisplay στην νέα θέση
+            const finalPriceContainer = document.getElementById('finalPriceContainer');
+            const finalPriceDisplay = document.getElementById('finalPriceDisplay');
+            if (finalPriceContainer && finalPriceDisplay) {
+                finalPriceContainer.classList.remove('hidden');
+                finalPriceDisplay.textContent = formatCurrency(finalPriceWithCommission) + ' €';
+            }
+        }
+
+        function exportCSV() {
+            if (currentBom.length === 0) {
+                alert('Δεν υπάρχουν δεδομένα για εξαγωγή.');
+                return;
+            }
+
+            const markup = parseFloat(document.getElementById('markupPercent').value) || 0;
+            const markupMultiplier = 1 + (markup / 100);
+
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+            csvContent += "Κωδικός;Περιγραφή;Ποσότητα;Μονάδα;Τιμή Αγοράς (€);Κόστος (€);Τιμή Πώλησης (€);Αξία (€)\r\n";
+
+            let grandTotalCost = 0;
+            let grandTotalPrice = 0;
+            
+            currentBom.forEach(item => {
+                const costPrice = item.qty * item.price;
+                const sellPrice = item.price * markupMultiplier;
+                const totalSellPrice = costPrice * markupMultiplier;
+                
+                grandTotalCost += costPrice;
+                grandTotalPrice += totalSellPrice;
+                
+                csvContent += `"${item.code}";"${item.description}";"${item.qty}";"${item.unit}";"${item.price.toFixed(2)}";"${costPrice.toFixed(2)}";"${sellPrice.toFixed(2)}";"${totalSellPrice.toFixed(2)}"\r\n`;
+            });
+            
+            const profit = grandTotalPrice - grandTotalCost;
+            const tafOfficeCommission = calculateTafOfficeCommission(currentTotalPower);
+            const finalPriceWithCommission = grandTotalPrice + tafOfficeCommission;
+            
+            // Προσθήκη γραμμών συνόλου
+            csvContent += `\r\n`;
+            csvContent += `"";"";"";"";"ΣΥΝΟΛΙΚΟ ΚΟΣΤΟΣ ΑΓΟΡΑΣ:";"${grandTotalCost.toFixed(2)} €";"";""\r\n`;
+            csvContent += `"";"";"";"";"ΚΕΡΔΟΣ (${markup}%):";"${profit.toFixed(2)} €";"";""\r\n`;
+            csvContent += `"";"";"";"";"ΤΙΜΗ ΠΩΛΗΣΗΣ (χωρίς προμήθεια):";"";"";${grandTotalPrice.toFixed(2)} €"\r\n`;
+            csvContent += `"";"";"";"";"ΠΡΟΜΗΘΕΙΑ TafOffice (${currentTotalPower.toFixed(2)} kWp):";"";"";${tafOfficeCommission.toFixed(2)} €"\r\n`;
+            csvContent += `"";"";"";"";"ΤΕΛΙΚΗ ΤΙΜΗ ΠΩΛΗΣΗΣ (με προμήθεια):";"";"";${finalPriceWithCommission.toFixed(2)} €"\r\n`;
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "BoM_PV_Calculator.csv");
+            document.body.appendChild(link);
+            
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // --- ΕΞΑΓΩΓΗ/ΕΙΣΑΓΩΓΗ ΕΡΓΟΥ ---
+        function exportProject() {
+            const projectData = {
+                version: '1.0',
+                timestamp: new Date().toISOString(),
+                inputs: {
+                    panelPower: panelPowerInput.value,
+                    panelLength: panelLengthInput.value,
+                    panelWidth: panelWidthInput.value,
+                    panelThickness: panelThicknessInput.value,
+                    panelGap: panelGapInput.value,
+                    alignment: alignmentInput.value,
+                    tilt: tiltInput.value,
+                    frontElevation: frontElevationInput.value,
+                    rammingDepth: rammingDepthInput.value,
+                    frontPoleHeight: frontPoleHeightInput.value,
+                    rearPoleHeight: rearPoleHeightInput.value,
+                    inclinedBeamLength: inclinedBeamLengthInput.value,
+                    snowLoad: snowLoadInput.value,
+                    windLoad: windLoadInput.value,
+                    studyNumber: studyNumberInput.value,
+                    markupPercent: document.getElementById('markupPercent').value,
+                    rearPileProfile: rearPileProfileInput.value,
+                    rearPilePrice: document.getElementById('rearPilePrice').value,
+                    rearPileWeight: document.getElementById('rearPileWeight').value,
+                    frontPileProfile: frontPileProfileInput.value,
+                    frontPilePrice: document.getElementById('frontPilePrice').value,
+                    frontPileWeight: document.getElementById('frontPileWeight').value,
+                    inclinedProfile: inclinedProfileInput.value,
+                    inclinedPrice: document.getElementById('inclinedPrice').value,
+                    inclinedWeight: document.getElementById('inclinedWeight').value,
+                    purlinProfile: purlinProfileInput.value,
+                    purlinPrice: document.getElementById('purlinPrice').value,
+                    purlinWeight: document.getElementById('purlinWeight').value,
+                    strutProfile: strutProfileInput.value,
+                    strutPrice: document.getElementById('strutPrice').value,
+                    strutWeight: document.getElementById('strutWeight').value,
+                    finPlateFrontProfile: finPlateFrontProfileInput.value,
+                    finPlateFrontPrice: document.getElementById('finPlateFrontPrice').value,
+                    finPlateFrontWeight: document.getElementById('finPlateFrontWeight').value,
+                    finPlateBackProfile: finPlateBackProfileInput.value,
+                    finPlateBackPrice: document.getElementById('finPlateBackPrice').value,
+                    finPlateBackWeight: document.getElementById('finPlateBackWeight').value,
+                    steelGrade: steelGradeInput.value,
+                    customSteelGrade: customSteelGradeInput.value,
+                    coating: coatingInput.value
+                },
+                tables: tableRowsData
+            };
+            
+            const jsonString = JSON.stringify(projectData, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            const studyNum = studyNumberInput.value || 'project';
+            link.href = url;
+            link.download = `PV_Project_${studyNum}_${new Date().toISOString().slice(0,10)}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            alert('Το έργο εξήχθη επιτυχώς!');
+        }
+        
+        function importProject(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const projectData = JSON.parse(e.target.result);
+                    
+                    // Φόρτωση inputs
+                    const inputs = projectData.inputs;
+                    panelPowerInput.value = inputs.panelPower || '';
+                    panelLengthInput.value = inputs.panelLength || '';
+                    panelWidthInput.value = inputs.panelWidth || '';
+                    panelThicknessInput.value = inputs.panelThickness || '';
+                    panelGapInput.value = inputs.panelGap || '';
+                    alignmentInput.value = inputs.alignment || '2P';
+                    tiltInput.value = inputs.tilt || '';
+                    frontElevationInput.value = inputs.frontElevation || '';
+                    rammingDepthInput.value = inputs.rammingDepth || '';
+                    frontPoleHeightInput.value = inputs.frontPoleHeight || '';
+                    rearPoleHeightInput.value = inputs.rearPoleHeight || '';
+                    inclinedBeamLengthInput.value = inputs.inclinedBeamLength || '3800';
+                    snowLoadInput.value = inputs.snowLoad || '';
+                    windLoadInput.value = inputs.windLoad || '';
+                    studyNumberInput.value = inputs.studyNumber || '';
+                    document.getElementById('markupPercent').value = inputs.markupPercent || 20;
+                    rearPileProfileInput.value = inputs.rearPileProfile || '';
+                    document.getElementById('rearPilePrice').value = inputs.rearPilePrice || '';
+                    document.getElementById('rearPileWeight').value = inputs.rearPileWeight || '';
+                    frontPileProfileInput.value = inputs.frontPileProfile || '';
+                    document.getElementById('frontPilePrice').value = inputs.frontPilePrice || '';
+                    document.getElementById('frontPileWeight').value = inputs.frontPileWeight || '';
+                    inclinedProfileInput.value = inputs.inclinedProfile || '';
+                    document.getElementById('inclinedPrice').value = inputs.inclinedPrice || '';
+                    document.getElementById('inclinedWeight').value = inputs.inclinedWeight || '';
+                    purlinProfileInput.value = inputs.purlinProfile || '';
+                    document.getElementById('purlinPrice').value = inputs.purlinPrice || '';
+                    document.getElementById('purlinWeight').value = inputs.purlinWeight || '';
+                    strutProfileInput.value = inputs.strutProfile || '';
+                    document.getElementById('strutPrice').value = inputs.strutPrice || '';
+                    document.getElementById('strutWeight').value = inputs.strutWeight || '';
+                    finPlateFrontProfileInput.value = inputs.finPlateFrontProfile || '';
+                    document.getElementById('finPlateFrontPrice').value = inputs.finPlateFrontPrice || '';
+                    document.getElementById('finPlateFrontWeight').value = inputs.finPlateFrontWeight || '';
+                    finPlateBackProfileInput.value = inputs.finPlateBackProfile || '';
+                    document.getElementById('finPlateBackPrice').value = inputs.finPlateBackPrice || '';
+                    document.getElementById('finPlateBackWeight').value = inputs.finPlateBackWeight || '';
+                    steelGradeInput.value = inputs.steelGrade || 'S235';
+                    customSteelGradeInput.value = inputs.customSteelGrade || '';
+                    coatingInput.value = inputs.coating || 'HDG ISO 1461';
+                    
+                    // Φόρτωση τραπεζιών
+                    tableRowsData = projectData.tables || [];
+                    renderTableRows();
+                    
+                    alert('Το έργο φορτώθηκε επιτυχώς!');
+                } catch (error) {
+                    alert('Σφάλμα κατά τη φόρτωση του έργου: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+        
+        // --- ΕΙΣΑΓΩΓΗ ΤΙΜΩΝ ΑΓΟΡΑΣ ---
+        const priceMapping = {
+            'EX-89697050300': 'corePrice',
+            'EX-8540685101': 'washerDin9021Price',
+            'EX-7622802001': 'hexMetricScrewPrice',
+            'EX-8968808201': 'hexNutDin6923Price',
+            'EX-8540685151': 'washerDin9021_15Price',
+            'EX-7622140301': 'hexHeadBoltPrice',
+            'EX-8968014201': 'hexNutDin934Price',
+            'EX-7622803001': 'hexBoltIsoPrice',
+            'EX-8960005801': 'liftingEyeBoltPrice',
+            'EX-8960005111': 'turnbucklePrice',
+            'EX-8960005301': 'wireRopeClipPrice',
+            'EX-8960006401': 'wireRopePrice'
+        };
+        
+        let customPrices = {
+            'EX-89697050300': 1,
+            'EX-8540685101': 0.0307,
+            'EX-7622802001': 0.05496,
+            'EX-8968808201': 0.0252,
+            'EX-8540685151': 0.0676,
+            'EX-7622140301': 0.45,
+            'EX-8968014201': 0.08484,
+            'EX-7622803001': 0.055176,
+            'EX-8960005801': 0.456,
+            'EX-8960005111': 1.22,
+            'EX-8960005301': 0.2,
+            'EX-8960006401': 0.32
+        };
+        
+        // Roundup values για συγκεκριμένους κωδικούς
+        const roundupValues = {
+            'EX-8540685101': 100,
+            'EX-7622802001': 100,
+            'EX-8968808201': 100,
+            'EX-8540685151': 50,
+            'EX-7622140301': 50,
+            'EX-8968014201': 50,
+            'EX-7622803001': 100,
+            'EX-8960005801': 100,
+            'EX-8960005111': 100,
+            'EX-8960005301': 100,
+            'EX-8960006401': 250
+        };
+        
+        // Helper function για roundup ποσότητας
+        function roundUpQuantity(qty, code) {
+            const roundupValue = roundupValues[code];
+            if (!roundupValue) return qty; // Αν δεν υπάρχει roundup, επιστρέφει την αρχική ποσότητα
+            return Math.ceil(qty / roundupValue) * roundupValue;
+        }
+        
+        // Helper function για να παίρνει την τιμή (custom ή default)
+        function getPrice(code, defaultPrice) {
+            return customPrices[code] !== undefined ? customPrices[code] : defaultPrice;
+        }
+        
+        function importPrices(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const lines = e.target.result.split('\n');
+                    let updatedCount = 0;
+                    
+                    for (let i = 1; i < lines.length; i++) { // Skip header
+                        const line = lines[i].trim();
+                        if (!line) continue;
+                        
+                        const parts = line.split(/[;,]/); // Support both ; and ,
+                        if (parts.length < 2) continue;
+                        
+                        const code = parts[0].replace(/"/g, '').trim();
+                        const price = parseFloat(parts[1].replace(/"/g, '').trim());
+                        
+                        if (code.startsWith('EX-') && !isNaN(price)) {
+                            customPrices[code] = price;
+                            updatedCount++;
+                        }
+                    }
+                    
+                    alert(`Ενημερώθηκαν ${updatedCount} τιμές αγοράς!\n\nΠατήστε "Υπολογισμός BoM" για να δείτε τις νέες τιμές.`);
+                } catch (error) {
+                    alert('Σφάλμα κατά την εισαγωγή τιμών: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // --- ΔΙΑΧΕΙΡΙΣΗ MODAL ΤΕΓΙΔΩΝ ---
+        function openPurlinModal(tableId) {
+            currentEditingTableId = tableId;
+            const row = tableRowsData.find(r => r.id === tableId);
+            if (!row) return;
+            
+            // Ενημέρωση πληροφοριών modal
+            const tableIndex = tableRowsData.indexOf(row) + 1;
+            const idealLength = row.tableLength + 0.1; // +10cm
+            
+            document.getElementById('modalTableNo').textContent = tableIndex;
+            document.getElementById('modalOverhang').textContent = Math.round(row.overhang);
+            document.getElementById('modalEdge').textContent = row.edgeSpan.toFixed(3);
+            document.getElementById('modalMidQty').textContent = row.midSpansQty;
+            document.getElementById('modalMid').textContent = row.midSpan.toFixed(3);
+            document.getElementById('modalEdgeR').textContent = row.edgeSpan.toFixed(3);
+            document.getElementById('modalOverhangR').textContent = Math.round(row.overhang);
+            document.getElementById('modalTotalLength').textContent = row.tableLength.toFixed(2);
+            document.getElementById('modalIdealLength').textContent = idealLength.toFixed(2);
+            
+            renderPurlinsInModal();
+            document.getElementById('purlinModal').classList.add('active');
+        }
+        
+        function closePurlinModal() {
+            document.getElementById('purlinModal').classList.remove('active');
+            currentEditingTableId = null;
+            renderTableRows(); // Ενημέρωση του counter στο κουμπί
+        }
+        
+        function addPurlinToModal() {
+            if (!currentEditingTableId) return;
+            const row = tableRowsData.find(r => r.id === currentEditingTableId);
+            if (!row) return;
+            
+            row.purlins.push({ length: 6.00 }); // Default length με 2 δεκαδικά
+            renderPurlinsInModal();
+        }
+        
+        function removePurlin(purlinIndex) {
+            if (!currentEditingTableId) return;
+            const row = tableRowsData.find(r => r.id === currentEditingTableId);
+            if (!row) return;
+            
+            row.purlins.splice(purlinIndex, 1);
+            renderPurlinsInModal();
+        }
+        
+        function updatePurlinLength(purlinIndex, value) {
+            if (!currentEditingTableId) return;
+            const row = tableRowsData.find(r => r.id === currentEditingTableId);
+            if (!row) return;
+            
+            row.purlins[purlinIndex].length = parseFloat(value) || 0;
+            renderPurlinsInModal();
+        }
+        
+        function calculatePurlinPositions(row) {
+            // Δημιουργία array με τα ανοίγματα
+            const spans = [];
+            
+            // Overhang αριστερά
+            spans.push({ type: 'Overhang L', length: row.overhang / 1000 });
+            
+            // Edge span αριστερά
+            spans.push({ type: 'Edge L', length: row.edgeSpan });
+            
+            // Mid spans
+            for (let i = 0; i < row.midSpansQty; i++) {
+                spans.push({ type: `Mid ${i + 1}`, length: row.midSpan });
+            }
+            
+            // Edge span δεξιά
+            spans.push({ type: 'Edge R', length: row.edgeSpan });
+            
+            // Overhang δεξιά
+            spans.push({ type: 'Overhang R', length: row.overhang / 1000 });
+            
+            // Υπολογισμός offset για κεντράρισμα τεγίδων
+            const totalPurlinLength = row.purlins.reduce((sum, p) => sum + p.length, 0);
+            const tableLength = row.tableLength;
+            const offset = (tableLength - totalPurlinLength) / 2;
+            
+            // Υπολογισμός θέσεων τεγίδων με offset
+            let currentPosition = offset; // Ξεκινάμε από το offset
+            const purlinPositions = [];
+            
+            row.purlins.forEach((purlin, idx) => {
+                const startPos = currentPosition;
+                const endPos = currentPosition + purlin.length;
+                
+                // Βρες σε ποιο span πέφτει το τέλος της τεγίδας
+                let accumulatedLength = 0;
+                let spanInfo = '';
+                
+                for (let i = 0; i < spans.length; i++) {
+                    const nextLength = accumulatedLength + spans[i].length;
+                    
+                    if (endPos <= nextLength) {
+                        // Το τέλος πέφτει σε αυτό το span
+                        const positionInSpan = endPos - accumulatedLength;
+                        const percentageInSpan = (positionInSpan / spans[i].length) * 100;
+                        
+                        spanInfo = `${endPos.toFixed(2)}m → ${spans[i].type} (${percentageInSpan.toFixed(1)}%)`;
+                        break;
+                    }
+                    
+                    accumulatedLength = nextLength;
+                }
+                
+                // Αν το endPos είναι μετά το τελευταίο span
+                if (spanInfo === '') {
+                    const overflow = endPos - accumulatedLength;
+                    spanInfo = `${endPos.toFixed(2)}m → Υπέρβαση +${overflow.toFixed(2)}m`;
+                }
+                
+                purlinPositions.push({
+                    index: idx,
+                    startPos: startPos.toFixed(2),
+                    endPos: endPos.toFixed(2),
+                    spanInfo: spanInfo
+                });
+                
+                currentPosition = endPos;
+            });
+            
+            return purlinPositions;
+        }
+        
+        function renderPurlinsInModal() {
+            if (!currentEditingTableId) return;
+            const row = tableRowsData.find(r => r.id === currentEditingTableId);
+            if (!row) return;
+            
+            const positions = calculatePurlinPositions(row);
+            const container = document.getElementById('purlinsRows');
+            const summaryDiv = document.getElementById('purlinSummary');
+            
+            // Υπολογισμός συνολικού μήκους τεγίδων
+            const totalPurlinLength = row.purlins.reduce((sum, p) => sum + p.length, 0);
+            const tableLength = row.tableLength;
+            const idealLength = tableLength + 0.1; // +10cm
+            const remaining = idealLength - totalPurlinLength;
+            const offset = (tableLength - totalPurlinLength) / 2;
+            
+            // Χρωματισμός ανάλογα με την κατάσταση
+            let bgColor = 'bg-red-100';
+            let textColor = 'text-red-800';
+            let message = '';
+            
+            if (remaining <= 0.05 && remaining >= -0.05) {
+                // Μέσα σε ±5cm από το ιδανικό
+                bgColor = 'bg-green-100';
+                textColor = 'text-green-800';
+                message = `✓ Τέλειο! Οι τεγίδες καλύπτουν το ιδανικό μήκος (${totalPurlinLength.toFixed(2)}m). `;
+                message += `Ξεκινάνε από ${offset.toFixed(3)}m ${offset < 0 ? '(πριν το 0 - προεξοχή)' : '(μετά το 0)'}`;
+            } else if (remaining > 0) {
+                // Λείπει ακόμα
+                bgColor = 'bg-yellow-100';
+                textColor = 'text-yellow-800';
+                message = `⚠ Λείπουν ${remaining.toFixed(2)}m για να φτάσεις το ιδανικό μήκος (${idealLength.toFixed(2)}m). `;
+                message += `Οι τεγίδες ξεκινάνε από ${offset.toFixed(3)}m.`;
+            } else {
+                // Υπερβαίνει (πάνω από +15cm)
+                if (Math.abs(remaining) > 0.05) {
+                    bgColor = 'bg-orange-100';
+                    textColor = 'text-orange-800';
+                    message = `⚠ Οι τεγίδες υπερβαίνουν το ιδανικό κατά ${Math.abs(remaining).toFixed(2)}m (Σύνολο: ${totalPurlinLength.toFixed(2)}m). `;
+                    message += `Ξεκινάνε από ${offset.toFixed(3)}m ${offset < 0 ? '(πριν το 0 - προεξοχή ' + Math.abs(offset*1000).toFixed(0) + 'mm)' : ''}`;
+                }
+            }
+            
+            summaryDiv.className = `mb-4 p-3 rounded-md text-sm font-medium ${bgColor} ${textColor}`;
+            summaryDiv.innerHTML = message;
+            
+            if (row.purlins.length === 0) {
+                container.innerHTML = '<div class="text-center text-gray-500 py-4">Δεν υπάρχουν τεγίδες. Πάτησε "+ Προσθήκη Τεγίδας"</div>';
+                summaryDiv.className = 'mb-4 p-3 rounded-md text-sm font-medium bg-red-100 text-red-800';
+                summaryDiv.innerHTML = `<span>⚠ Προσθέστε τεγίδες! Χρειάζονται ${idealLength.toFixed(2)}m συνολικά.</span>`;
+                return;
+            }
+            
+            let html = '';
+            row.purlins.forEach((purlin, idx) => {
+                const pos = positions[idx];
+                html += `
+                    <div class="purlin-row">
+                        <div class="text-center font-medium">${idx + 1}</div>
+                        <input type="number" step="0.01" value="${purlin.length.toFixed(2)}" 
+                               onchange="updatePurlinLength(${idx}, this.value)"
+                               class="px-2 py-1 border rounded" />
+                        <div class="text-sm text-gray-600">${pos.startPos}m</div>
+                        <div class="text-sm font-medium text-blue-700">${pos.spanInfo}</div>
+                        <button onclick="removePurlin(${idx})" class="text-red-600 hover:text-red-800 font-bold" title="Διαγραφή">×</button>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+
+    </script>
+</body>
+</html>
