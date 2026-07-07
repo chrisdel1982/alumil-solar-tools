@@ -366,9 +366,60 @@ let companyStats = { projects: 500, power: 2000 };
 
 const LS_UNAVAILABLE_NOTE = true; // artifacts cannot use localStorage; state lives in memory for this session only
 
-function loadInitial(){
-  projects = DEFAULT_PROJECTS.map(p => ({...p}));
-  selected = new Set(projects.map(p=>p.id));
+/* Shared column-matching logic — same flexible matching used by the manual
+   Import button, so a fetched xlsx and a manually-imported xlsx behave identically. */
+function parseRowsToProjectData(rows){
+  if(!rows.length) return null;
+  const keys = Object.keys(rows[0]);
+  const find = (cands) => keys.find(k => cands.some(c => k.toLowerCase().replace(/[^a-z]/g,'').includes(c)));
+  const kProject = find(['project','country','installation']) || keys[0];
+  const kSystem = find(['system','structure','mounting']) || keys[1];
+  const kPower = find(['power','mw']) || keys[2];
+  const kYear = find(['year']) || keys[3];
+  const kFeatured = find(['featured','flagship','showcase']);
+
+  const imported = rows
+    .filter(r => (r[kProject]||'').toString().trim())
+    .map((r,i)=>({
+      id: i+1,
+      project: (r[kProject]||'').toString().trim(),
+      system: (r[kSystem]||'').toString().trim(),
+      power: Number(r[kPower]) || 0,
+      year: r[kYear] ? Number(r[kYear]) : '',
+      _featured: kFeatured ? /^(y|yes|1|true|ναι)$/i.test((r[kFeatured]||'').toString().trim()) : false
+    }));
+
+  const featuredIds = new Set(imported.filter(p=>p._featured).slice(0,FEATURED_MAX).map(p=>p.id));
+  imported.forEach(p=>delete p._featured);
+  return { imported, featuredIds };
+}
+
+/* Data source priority:
+   1. data/references.xlsx in the repo (so every colleague sees the same live list
+      without touching this html file — one source of truth, like it should be).
+   2. DEFAULT_PROJECTS baked into this file, used only if the fetch fails
+      (offline, opened as a lone local file, path moved, etc).
+   Path is relative to this file living in tools/ — data/ is a sibling of tools/. */
+async function loadInitial(){
+  try{
+    const res = await fetch('../data/references.xlsx', {cache:'no-store'});
+    if(!res.ok) throw new Error('fetch not ok: ' + res.status);
+    const buf = await res.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+    const parsed = parseRowsToProjectData(rows);
+    if(!parsed || !parsed.imported.length) throw new Error('empty sheet');
+
+    projects = parsed.imported;
+    selected = new Set(projects.map(p=>p.id));
+    featured = parsed.featuredIds;
+  }catch(err){
+    console.warn('Δεν βρέθηκε ή δεν διαβάστηκε το data/references.xlsx — εμφανίζονται τα ενσωματωμένα στοιχεία.', err);
+    projects = DEFAULT_PROJECTS.map(p => ({...p}));
+    selected = new Set(projects.map(p=>p.id));
+    toast('Χωρίς σύνδεση με το online αρχείο δεδομένων — εμφανίζονται τα ενσωματωμένα στοιχεία.', true);
+  }
 }
 
 /* ================= HELPERS ================= */
@@ -713,32 +764,14 @@ document.getElementById('fileImport').addEventListener('change', (e)=>{
       const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
       if(!rows.length){ toast('Το αρχείο δεν περιέχει δεδομένα.', true); return; }
 
-      // flexible column matching
-      const keys = Object.keys(rows[0]);
-      const find = (cands) => keys.find(k => cands.some(c => k.toLowerCase().replace(/[^a-z]/g,'').includes(c)));
-      const kProject = find(['project','country','installation']) || keys[0];
-      const kSystem = find(['system','structure','mounting']) || keys[1];
-      const kPower = find(['power','mw']) || keys[2];
-      const kYear = find(['year']) || keys[3];
-      const kFeatured = find(['featured','flagship','showcase']);
+      const parsed = parseRowsToProjectData(rows);
+      if(!parsed || !parsed.imported.length){ toast('Το αρχείο δεν περιέχει έγκυρα δεδομένα.', true); return; }
 
-      const imported = rows
-        .filter(r => (r[kProject]||'').toString().trim())
-        .map((r,i)=>({
-          id: i+1,
-          project: (r[kProject]||'').toString().trim(),
-          system: (r[kSystem]||'').toString().trim(),
-          power: Number(r[kPower]) || 0,
-          year: r[kYear] ? Number(r[kYear]) : '',
-          _featured: kFeatured ? /^(y|yes|1|true|ναι)$/i.test((r[kFeatured]||'').toString().trim()) : false
-        }));
-
-      projects = imported;
+      projects = parsed.imported;
       selected = new Set(projects.map(p=>p.id));
-      featured = new Set(imported.filter(p=>p._featured).slice(0,FEATURED_MAX).map(p=>p.id));
-      projects.forEach(p=>delete p._featured);
+      featured = parsed.featuredIds;
       fullRender();
-      toast(`Εισήχθησαν ${imported.length} έργα από το ${file.name}.`);
+      toast(`Εισήχθησαν ${projects.length} έργα από το ${file.name}.`);
     }catch(err){
       console.error(err);
       toast('Σφάλμα ανάγνωσης του αρχείου xlsx.', true);
@@ -1002,8 +1035,10 @@ function generatePdf(){
 }
 
 /* ================= INIT ================= */
-loadInitial();
-fullRender();
+(async function init(){
+  await loadInitial();
+  fullRender();
+})();
 </script>
 </body>
 </html>
