@@ -167,6 +167,10 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#E8EAEE;color:var(--dark
       </div>
       <div class="fld"><label>Σειρές (βάθος)</label><input type="number" id="p-rows" value="2" min="1" max="10"></div>
     </div>
+    <!-- ΝΕΟ ΠΕΔΙΟ ΙΣΧΥΟΣ ΧΩΡΙΣ ΑΛΛΑΓΗ ΣΤΗ ΜΟΡΦΟΠΟΙΗΣΗ -->
+    <div class="g1">
+      <div class="fld"><label>Ισχύς πάνελ (W)</label><input type="number" id="pPower" value="590" min="1"></div>
+    </div>
     <div class="info" style="font-size:10px;">Κενά μεταξύ πάνελ: <strong>22 mm</strong> (σταθερό)</div>
   </div>
 
@@ -368,6 +372,9 @@ function computeTable() {
   const pW     = parseInt(document.getElementById('p-w').value) || 1134;
   const orient = document.getElementById('p-orient').value;
   const rows   = parseInt(document.getElementById('p-rows').value) || 2;
+  
+  // Η ΝΕΑ ΓΡΑΜΜΗ ΜΠΑΙΝΕΙ ΕΔΩ: Διαβάζει σωστά το νέο σου ID pPower
+  const pPower = parseFloat(document.getElementById('pPower').value) || 0;
 
   const purTotal = purlins.reduce((a,b)=>a+b,0);
   const spanSum  = wEdge*2 + wMid*nMid;
@@ -399,11 +406,11 @@ function computeTable() {
     totalPanels,
     totalLen,
     totalDepth,
-    kw: (totalPanels * 0.45).toFixed(1),
+    kw: ((totalPanels * pPower) / 1000).toFixed(1), // Τώρα το pPower είναι καθαρός αριθμός!
     oh, nMid, wMid, wEdge
   };
 
-  return { svg, stats, params: {nMid,wMid,wEdge,cross,purlins,pH,pW,orient,rows} };
+  return { svg, stats, params: {nMid,wMid,wEdge,cross,purlins,pH,pW,orient,rows,pPower} };
 }
 
 // "⟳ Δημιουργία Σχεδίου" — (re)generates the CURRENT (last) table only, no new card
