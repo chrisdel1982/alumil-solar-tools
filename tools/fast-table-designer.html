@@ -190,7 +190,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#E8EAEE;color:var(--dark
   <div class="sh">Ανοίγματα (Spans)</div>
   <div class="sb">
     <div class="g2">
-      <div class="fld"><label>Αριθμος Μεσαίων</label><input type="number" id="n-mid" value="" min="1" max="80" oninput="updateInfo()"></div>
+      <div class="fld"><label>Αριθμος Μεσαίων</label><input type="number" id="n-mid" value="" min="0" max="80" oninput="updateInfo()"></div>
       <div class="fld"><label>Πλάτος μεσαιων (mm)</label><input type="number" id="w-mid" value="" min="100" oninput="onMidChange()"></div>
     </div>
   <div class="g2">
@@ -321,9 +321,15 @@ function updateInfo() {
   const wMid  = parseInt(document.getElementById('w-mid').value) || 0;
   const wEdge = parseInt(document.getElementById('w-edge').value) || 0;
 
+  // Κρύβω το πεδίο πλάτους μεσαίων αν nMid=0
+  const midWidthField = document.getElementById('w-mid').closest('.fld');
+  midWidthField.style.visibility = nMid === 0 ? 'hidden' : 'visible';
+
   const spanSum = wEdge*2 + wMid*nMid;
+  const totalSpans = nMid + 2;
+  const totalPiles = nMid + 3;
   document.getElementById('span-info').innerHTML =
-    `Σύνολο spans: <strong>${spanSum.toLocaleString('el-GR')} mm</strong> &nbsp;|&nbsp; ${nMid+2} ανοίγματα`;
+    `Σύνολο spans: <strong>${spanSum.toLocaleString('el-GR')} mm</strong> &nbsp;|&nbsp; ${totalSpans} ανοίγματα &nbsp;|&nbsp; ${totalPiles} piles`;
 
   const raw = document.getElementById('purlin-input').value.trim();
   const parts = raw.split('-').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n)&&n>0);
@@ -362,7 +368,7 @@ function updateInfo() {
 // ── MAIN GENERATE ──
 // Computes everything needed for a table from current sidebar values, returns {svg, stats, params}
 function computeTable() {
-  const nMid   = parseInt(document.getElementById('n-mid').value) || 3;
+  const nMid   = parseInt(document.getElementById('n-mid').value) || 0;
   const wMid   = parseInt(document.getElementById('w-mid').value) || 2750;
   const wEdge  = parseInt(document.getElementById('w-edge').value) || 2300;
   const cross  = document.getElementById('cross').checked;
