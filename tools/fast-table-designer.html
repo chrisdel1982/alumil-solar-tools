@@ -190,7 +190,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#E8EAEE;color:var(--dark
   <div class="sh">Ανοίγματα (Spans)</div>
   <div class="sb">
     <div class="g2">
-      <div class="fld"><label>Αριθμος Μεσαίων</label><input type="number" id="n-mid" value="" min="0" max="80" oninput="updateInfo()"></div>
+      <div class="fld"><label>Αριθμος Μεσαίων</label><input type="number" id="n-mid" value="" min="-1" max="80" oninput="updateInfo()"></div>
       <div class="fld"><label>Πλάτος μεσαιων (mm)</label><input type="number" id="w-mid" value="" min="100" oninput="onMidChange()"></div>
     </div>
   <div class="g2">
@@ -321,13 +321,14 @@ function updateInfo() {
   const wMid  = parseInt(document.getElementById('w-mid').value) || 0;
   const wEdge = parseInt(document.getElementById('w-edge').value) || 0;
 
-  // Κρύβω το πεδίο πλάτους μεσαίων αν nMid=0
+  // Κρύβω το πεδίο πλάτους μεσαίων αν nMid<=0
   const midWidthField = document.getElementById('w-mid').closest('.fld');
-  midWidthField.style.visibility = nMid === 0 ? 'hidden' : 'visible';
+  midWidthField.style.visibility = nMid <= 0 ? 'hidden' : 'visible';
 
-  const spanSum = wEdge*2 + wMid*nMid;
-  const totalSpans = nMid + 2;
-  const totalPiles = nMid + 3;
+  const effectiveMid = Math.max(nMid, 0);
+  const spanSum = nMid === -1 ? wEdge : wEdge*2 + wMid*effectiveMid;
+  const totalSpans = nMid === -1 ? 1 : effectiveMid + 2;
+  const totalPiles = nMid === -1 ? 2 : effectiveMid + 3;
   document.getElementById('span-info').innerHTML =
     `Σύνολο spans: <strong>${spanSum.toLocaleString('el-GR')} mm</strong> &nbsp;|&nbsp; ${totalSpans} ανοίγματα &nbsp;|&nbsp; ${totalPiles} piles`;
 
@@ -383,7 +384,7 @@ function computeTable() {
   const pPower = parseFloat(document.getElementById('pPower').value) || 0;
 
   const purTotal = purlins.reduce((a,b)=>a+b,0);
-  const spanSum  = wEdge*2 + wMid*nMid;
+  const spanSum  = nMid === -1 ? wEdge : wEdge*2 + wMid*Math.max(nMid,0);
   const oh = Math.round((purTotal - spanSum) / 2);
 
   if (oh < 0 || purlins.length === 0) {
@@ -391,8 +392,8 @@ function computeTable() {
     return null;
   }
 
-  const totalLen = purTotal; // = oh*2 + spanSum
-  const spans = [wEdge, ...Array(nMid).fill(wMid), wEdge];
+  const totalLen = purTotal;
+  const spans = nMid === -1 ? [wEdge] : [wEdge, ...Array(Math.max(nMid,0)).fill(wMid), wEdge];
 
   // Panel dims
   const pLong = orient === 'portrait' ? pW : pH;   // along X (length)
