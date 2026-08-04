@@ -229,6 +229,15 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#E8EAEE;color:var(--dark
     <div class="teg-list" id="teg-list"></div>
   </div>
 
+  <!-- REPEAT MULTIPLIER -->
+  <div class="sh">Επανάληψη Τραπεζιού</div>
+  <div class="sb">
+    <div class="g1"><div class="fld"><label>Φορές που επαναλαμβάνεται (×Ν)</label>
+      <input type="number" id="tbl-mult" value="1" min="1" oninput="updateInfo()">
+    </div></div>
+    <div class="info" id="mult-info" style="font-size:10px;">—</div>
+  </div>
+
   <!-- GENERATE BTN -->
   <div class="sb">
     <button class="tbtn tbtn-green" style="width:100%;padding:11px;font-size:13px;" onclick="generateCurrent()">⟳ Δημιουργία Σχεδίου</button>
@@ -364,6 +373,11 @@ function updateInfo() {
   document.getElementById('teg-list').innerHTML = parts.map((l,i) =>
     `<div class="teg-item"><span>Τεγίδα ${i+1}</span><b>${l.toLocaleString('el-GR')} mm</b></div>`
   ).join('');
+
+  const mult = Math.max(1, parseInt(document.getElementById('tbl-mult').value) || 1);
+  document.getElementById('mult-info').innerHTML = mult > 1
+    ? `Το σχέδιο μένει <strong>ίδιο</strong>, αλλά τα Πάνελ/kWp/BoM θα πολλαπλασιαστούν ×<strong>${mult}</strong> (π.χ. το ίδιο τραπέζι επαναλαμβάνεται ${mult} φορές στο έργο).`
+    : 'Χωρίς πολλαπλασιασμό — το τραπέζι μετράει μία φορά.';
 }
 
 // ── MAIN GENERATE ──
@@ -401,7 +415,12 @@ function computeTable() {
 
   const totalDepth = rows * pDeep + (rows-1) * GAP;
   const nPanels    = Math.floor((totalLen + GAP) / (pLong + GAP));
-  const totalPanels = nPanels * rows;
+  const panelsPerTable = nPanels * rows;
+
+  // Πολλαπλασιαστής: πόσες φορές επαναλαμβάνεται το ΙΔΙΟ τραπέζι στο έργο.
+  // Επηρεάζει ΜΟΝΟ πάνελ/ισχύ (BoM), όχι το σχέδιο (μένει ένα τραπέζι στο SVG).
+  const mult = Math.max(1, parseInt(document.getElementById('tbl-mult').value) || 1);
+  const totalPanels = panelsPerTable * mult;
 
   const svg = buildSVG({
     totalLen, spans, oh, purlins, cross,
@@ -411,13 +430,15 @@ function computeTable() {
 
   const stats = {
     totalPanels,
+    panelsPerTable,
+    mult,
     totalLen,
     totalDepth,
     kw: ((totalPanels * pPower) / 1000).toFixed(1), // Τώρα το pPower είναι καθαρός αριθμός!
     oh, nMid, wMid, wEdge
   };
 
-  return { svg, stats, params: {nMid,wMid,wEdge,cross,purlins,pH,pW,orient,rows,pPower} };
+  return { svg, stats, params: {nMid,wMid,wEdge,cross,purlins,pH,pW,orient,rows,pPower,mult} };
 }
 
 // "⟳ Δημιουργία Σχεδίου" — (re)generates the CURRENT (last) table only, no new card
@@ -445,7 +466,9 @@ function addTable() {
 
   tableCounter++;
   const id = 'tbl-' + tableCounter;
-  tables.push({ id, svg: result.svg, stats: result.stats, params: result.params });
+  // Η Πλάγια Όψη που είναι φορτωμένη ΤΩΡΑ στο sidebar "κολλάει" σε ΑΥΤΟ το τραπέζι.
+  // Κάθε τραπέζι κρατά τη δική του — άλλαξε/καθάρισε την εικόνα πριν φτιάξεις το επόμενο.
+  tables.push({ id, svg: result.svg, stats: result.stats, params: result.params, sideView: sideViewSrc });
 
   renderTableCard(id, result.svg, result.stats);
   document.getElementById('empty-msg').style.display = 'none';
@@ -644,6 +667,8 @@ function f(n) { return parseFloat(n).toFixed(1); }
 function renderTableCard(id, svg, stats) {
   const idx = tables.findIndex(t=>t.id===id);
   const num = idx+1;
+  const t = tables[idx];
+  const cardSV = t ? t.sideView : null;
 
   let card = document.getElementById(id);
   const isNew = !card;
@@ -653,19 +678,43 @@ function renderTableCard(id, svg, stats) {
     card.id = id;
   }
 
+  const multBadge = stats.mult > 1
+    ? `<span class="tc-num" style="background:#1a3a6b;color:#fff;">×${stats.mult}</span>`
+    : '';
+  const panelsLbl = stats.mult > 1
+    ? `${stats.totalPanels} πάνελ (${stats.panelsPerTable}×${stats.mult})`
+    : `${stats.totalPanels} πάνελ`;
+  const multStat = stats.mult > 1
+    ? `<div class="stat"><div class="sv">×${stats.mult}</div><div class="sl">Επαναλήψεις</div></div>`
+    : '';
+  const svMiniImg = cardSV
+    ? `<img src="${cardSV}" style="max-height:52px;max-width:120px;border-radius:3px;display:block;">`
+    : `<span style="color:#aaa;font-size:10px;">Χωρίς πλάγια όψη</span>`;
+
   card.innerHTML = `
     <div class="tc-header">
       <span class="tc-num">Τραπέζι ${num}</span>
-      <span>${stats.nMid} μεσ. ανοίγματα × ${stats.wMid.toLocaleString('el-GR')} mm | ${stats.totalPanels} πάνελ</span>
+      ${multBadge}
+      <span>${stats.nMid} μεσ. ανοίγματα × ${stats.wMid.toLocaleString('el-GR')} mm | ${panelsLbl}</span>
       <button class="tc-remove" onclick="removeTable('${id}')">✕ Αφαίρεση</button>
     </div>
     <div class="tc-body">
       <div class="stats-row">
         <div class="stat"><div class="sv">${stats.totalPanels}</div><div class="sl">Σύνολο Πάνελ</div></div>
+        ${multStat}
         <div class="stat"><div class="sv">${stats.totalLen.toLocaleString('el-GR')}<span> mm</span></div><div class="sl">Συνολικό Μήκος</div></div>
         <div class="stat"><div class="sv">${stats.totalDepth.toLocaleString('el-GR')}<span> mm</span></div><div class="sl">Βάθος</div></div>
         <div class="stat"><div class="sv">${stats.kw}<span> kWp</span></div><div class="sl">Εκτιμ. Ισχύς</div></div>
         <div class="stat"><div class="sv">${stats.oh.toLocaleString('el-GR')}<span> mm</span></div><div class="sl">Overhang</div></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:6px 8px;background:var(--light);border:1px solid var(--border);border-radius:6px;">
+        <div style="min-width:120px;display:flex;align-items:center;">${svMiniImg}</div>
+        <button onclick="document.getElementById('svin-${id}').click()"
+          style="font-size:10.5px;background:#fff;border:1px solid var(--border);border-radius:4px;padding:4px 9px;cursor:pointer;color:var(--mid);">
+          ✎ Πλάγια Όψη τραπεζιού
+        </button>
+        <input type="file" id="svin-${id}" accept="image/*" style="display:none" onchange="onCardSideView(event,'${id}')">
+        <span style="font-size:9.5px;color:#aaa;">Ανεξάρτητη ανά τραπέζι — δεν επηρεάζει τα υπόλοιπα</span>
       </div>
       <div style="overflow-x:auto;">${svg}</div>
     </div>
@@ -675,6 +724,20 @@ function renderTableCard(id, svg, stats) {
 
   if (isNew) document.getElementById('canvas').appendChild(card);
   buildPrintPage(id, svg, stats);
+}
+
+// Ανεβάζει/αλλάζει την Πλάγια Όψη ΜΟΝΟ για το συγκεκριμένο τραπέζι (id)
+function onCardSideView(evt, id) {
+  const file = evt.target.files && evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const t = tables.find(x => x.id === id);
+    if (!t) return;
+    t.sideView = ev.target.result;
+    renderTableCard(id, t.svg, t.stats); // ξαναζωγραφίζει την κάρτα με τη νέα εικόνα
+  };
+  reader.readAsDataURL(file);
 }
 
 // Update an existing card in place (used by "⟳ Δημιουργία Σχεδίου")
@@ -688,6 +751,8 @@ function buildPrintPage(id, svg, stats) {
   const date   = document.getElementById('proj-date').value;
   const notes  = document.getElementById('proj-notes').value;
   const idx    = tables.findIndex(t=>t.id===id);
+  const t      = tables[idx];
+  const tableSideView = t ? t.sideView : null; // ανά τραπέζι, όχι global
 
   const svgPrint = svg.replace('width="1136"','width="100%"').replace(/width="\d+"/,'width="100%"');
 
@@ -695,22 +760,22 @@ function buildPrintPage(id, svg, stats) {
     <div class="ph">
       <img src="${LOGO}" alt="Alumil Solar">
       <div class="ph-info">
-        <h1>${title} — Τραπέζι ${idx+1}</h1>
+        <h1>${title} — Τραπέζι ${idx+1}${stats.mult>1?` (×${stats.mult})`:''}</h1>
         ${client?`<p>Πελάτης: ${client}</p>`:''}
         ${date?`<p>Ημερομηνία: ${date}</p>`:''}
       </div>
     </div>
     <div class="ph-stats">
-      <div class="ph-stat"><strong>${stats.totalPanels}</strong>Σύνολο Πάνελ</div>
+      <div class="ph-stat"><strong>${stats.totalPanels}</strong>Σύνολο Πάνελ${stats.mult>1?` (${stats.panelsPerTable}×${stats.mult})`:''}</div>
       <div class="ph-stat"><strong>${stats.totalLen.toLocaleString('el-GR')} mm</strong>Μήκος</div>
       <div class="ph-stat"><strong>${stats.totalDepth.toLocaleString('el-GR')} mm</strong>Βάθος</div>
       <div class="ph-stat"><strong>${stats.oh} mm</strong>Overhang</div>
       <div class="ph-stat"><strong>${stats.kw} kWp</strong>Ισχύς</div>
     </div>`;
 
-  if (sideViewSrc) {
+  if (tableSideView) {
     html += `<div class="ph-sv"><div class="ph-sv-title">Πλάγια Όψη (Side View)</div>
-      <img src="${sideViewSrc}"></div>`;
+      <img src="${tableSideView}"></div>`;
   }
 
   html += `<div class="ph-svg-title">Κάτοψη (Top View)</div>${svgPrint}`;
