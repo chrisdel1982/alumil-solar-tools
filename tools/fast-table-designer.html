@@ -190,7 +190,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#E8EAEE;color:var(--dark
   <div class="sh">Ανοίγματα (Spans)</div>
   <div class="sb">
     <div class="g2">
-      <div class="fld"><label>Αριθμος Μεσαίων</label><input type="number" id="n-mid" value="" min="-1" max="80" oninput="updateInfo()"></div>
+      <div class="fld"><label>Αριθμός Τριγώνων (πασσάλων)</label><input type="number" id="n-mid" value="" min="2" max="83" oninput="updateInfo()"></div>
       <div class="fld"><label>Πλάτος μεσαιων (mm)</label><input type="number" id="w-mid" value="" min="100" oninput="onMidChange()"></div>
     </div>
   <div class="g2">
@@ -326,7 +326,10 @@ function onSameAsMid() {
 }
 
 function updateInfo() {
-  const nMid  = parseInt(document.getElementById('n-mid').value) || 0;
+  // Ο χρήστης δίνει αριθμό ΤΡΙΓΩΝΩΝ (πασσάλων)· εσωτερικά μετατρέπεται σε "μεσαία ανοίγματα".
+  // τρίγωνα = μεσαία + 2 άκρα + 1  →  μεσαία = τρίγωνα - 3
+  const triangles = parseInt(document.getElementById('n-mid').value);
+  const nMid  = isNaN(triangles) ? 0 : (triangles - 3);
   const wMid  = parseInt(document.getElementById('w-mid').value) || 0;
   const wEdge = parseInt(document.getElementById('w-edge').value) || 0;
 
@@ -383,7 +386,9 @@ function updateInfo() {
 // ── MAIN GENERATE ──
 // Computes everything needed for a table from current sidebar values, returns {svg, stats, params}
 function computeTable() {
-  const nMid   = parseInt(document.getElementById('n-mid').value) || 0;
+  // Ο χρήστης δίνει αριθμό ΤΡΙΓΩΝΩΝ (πασσάλων)· εσωτερικά μετατρέπεται σε "μεσαία ανοίγματα".
+  const triangles = parseInt(document.getElementById('n-mid').value);
+  const nMid   = isNaN(triangles) ? 0 : (triangles - 3);
   const wMid   = parseInt(document.getElementById('w-mid').value) || 2750;
   const wEdge  = parseInt(document.getElementById('w-edge').value) || 2300;
   const cross  = document.getElementById('cross').checked;
